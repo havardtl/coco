@@ -147,9 +147,14 @@ class Zstack:
         os.makedirs(self.xml_folder,exist_ok = True)
         self.combined_mask_folder = os.path.join(TEMP_FOLDER,"combined_masks",self.id_z_stack)
         os.makedirs(self.combined_mask_folder,exist_ok=True)
+        self.img_w_contour_folder = os.path.join(TEMP_FOLDER,"img_w_contour",self.id_z_stack)
+        os.makedirs(self.img_w_contour_folder,exist_ok=True)
 
         self.img_dim = self.images[0].get_img_dim()
         self.x_res,self.y_res,self.z_res = self.get_physical_res()
+
+        self.projections = None
+        self.composite = None
         
         if VERBOSE:
             print("Made z_stack: "+str(self))
@@ -251,6 +256,162 @@ class Zstack:
         if VERBOSE:
             print("Writing info about contours to: "+contours_stats_path)
         df.to_csv(contours_stats_path)
+    
+    def make_projections(self,max_projection = True,auto_max=True):
+        '''
+        Make projections from z_planes by finding the minimal or maximal value in the z-axis
+        Params 
+        z_planes        : list : a list of paths to each plane in a stack of z_planes
+        max_projection  : bool : Use maximal projection, false gives minimal projection
+        auto_max        : bool : Auto level image after making projection
+        
+        Updates
+        self.projections : list of np.array : List of the projections of the z_planes as an 8-bit image. Ordered by channel_index.
+        self.composite   : np.array         : Composite image of the projections
+        '''
+        if VERBOSE:
+            print("Making projections for z_stack: "+self.id_z_stack)
+
+        projections = [None]*len(self.images[0].channels)
+        for i in self.images: 
+            for j in i.channels: 
+                if projections[j.channel_index] is None: 
+                    projections[j.channel_index] = j.get_image()
+                else: 
+                    if max_projection: 
+                        projections[j.channel_index] = np.maximum(projections[j.channel_index],j.get_image())
+                    else:
+                        projections[j.channel_index] = np.maximum(projections[j.channel_index],j.get_image())
+        
+        if auto_max: 
+            for i in range(len(projections)):
+                max_pixel = projections[i].max()
+                projections[i] = (projections[i]/max_pixel/255).astype('uint8') 
+       
+        self.projections = projections
+
+        composite = None 
+        for i in range(len(projections)):
+            if composite is None: 
+                composite = projections[i]
+            else: 
+                cv2.add(composite,projections[i])
+        self.composite = composite
+    
+    @classmethod 
+    def add_scale_bar(self,image,x_res):
+        '''
+        Add scale bar to image
+        
+        Params
+        image : np.array : cv2 image to add scale bar to
+        x_res : float    : Number of um each pixel in x-direction corresponds to
+        '''
+        img_width,img_height = image.shape
+
+        scale_in_pixels = int(img_width * 0.2)
+        scale_in_um = scale_pixels * x_res
+        
+        unit = "μm"
+        
+        scale_actual_str = ("{:.2f} {unit}").format(scale_actual,unit=unit)
+
+        margin = img_width*0.05
+        scale_box = [int(img_width - (scale_pixels+margin)),int(img_height*0.9),int(img_width-(margin)),int(img_height*0.89)] #[x1,y1,x2,y2] with x0,y0 in left bottom corner
+
+        cv2.rectangle(image,(scale_box[0],scale_box[1]),(scale_box[2],scale_box[3]),(255,255,255),thickness = -1)
+
+        text_x = scale_box[0] + int(img_width*0.02)
+        text_y = scale_box[1] - int(img_height*0.02)
+
+        cv2.putText(image,scale_actual_str,(text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX,0.5,(255,255,255),2)
+
+        return image
+    
+    def to_pdf(self,add_scale_bar = True):
+        '''
+        Convert z_stack into a pdf that displays information about it
+
+        Params
+        add_scale_bar : bool : Add a scale bar to image before plotting PDF
+        '''
+        '''
+        Create PDFs with images grouped after variables
+        
+        Params
+        df              : pd.Dataframe : Data frame with file paths to images (df["file_path"]) and their variables to sort them by. rows = images, cols = variables
+        file_vars       : list of str  : Column names of varibles used to make different PDF files
+        x_vars          : list of str  : Column names of variables to plot on x-axis
+        y_vars          : list of str  : Column names of variables to plot on y-axis
+        image_vars      : list of str  : Column names of variables to print on top of image
+        image_dim       : tuple of int : image dimensions
+        sort_ascending : list of bool  : Directions to sort each column in, file_vars then y_vars then x_vars. Must be equal in length to 1+len(x_vars)+len(y_vars) (file_vars is compressed to 1 column). True = ascending sort, False = descending sort.  
+        Returns
+        df_plot      : pd.DataFrame    : Data frame describing the location of images in the pdf
+        '''
+        
+        df = pd.DataFrame() 
+        
+        for i in self.images: 
+            for j in i.channels:
+                channel_id = j.id_channel 
+                file_id = j.id_channel
+                img_path = j.full_path
+                mask_path = j.get_mask_as_file(self.mask_save_folder)
+                j.make_img_with_contours(self.img_w_contour_folder)
+                img_w_contour_path = j.img_w_contour_path
+                combined_mask = j.combined_mask.mask_path
+
+        
+        df = pd.DataFrame()
+        
+        for i in self.images: 
+            for j in j.channels: 
+                for k in j.contours: 
+                    
+
+
+
+        df["file_vars"] = ""
+        sep=""
+        for i in file_vars: 
+            temp = df[i].astype(str).str.replace("_","")
+            df["file_vars"] = df["file_vars"] + sep + temp
+            sep="_"
+        
+        df["x_vars"] = ""
+        for i in x_vars: 
+            temp = df[i].astype(str).str.replace("_","")
+            df["x_vars"] = df["x_vars"] +"_"+ temp
+        
+        df["y_vars"] = ""
+        for i in y_vars: 
+            temp = df[i].astype(str).str.replace("_","")
+            df["y_vars"] = df["y_vars"] + "_" + temp
+
+        
+        if sort_ascending is None: 
+            sort_ascending = [True]*len(["file_vars"]+y_vars+x_vars)
+        df.sort_values(by = ["file_vars"]+y_vars+x_vars,ascending=sort_ascending,inplace=True)
+
+        for f in df["file_vars"].unique():
+            df_f = df[df["file_vars"]==f].copy()
+            xy_positions = pd.DataFrame(index = df_f["y_vars"].unique(),columns = df_f["x_vars"].unique())
+            for x_pos in range(0,len(xy_positions.columns)):
+                for y_pos in range(0,len(xy_positions.index)):
+                    xy_positions.iloc[y_pos,x_pos] = (x_pos,y_pos)
+            
+            df_f["pdf_x_position"] = None 
+            df_f["pdf_y_position"] = None 
+            for i in df_f.index:
+                xy = xy_positions.loc[df_f.loc[i,"y_vars"],df_f.loc[i,"x_vars"]]
+                df_f.loc[i,"pdf_x_position"] = xy[0] 
+                df_f.loc[i,"pdf_y_position"] = xy[1]
+            
+            save_path = os.path.join(save_folder,f+".pdf")
+            make_pdf(save_path,df_f,x_vars,y_vars,image_vars,image_dim)
+        
+        return "Made pdf!"
 
     def __repr__(self):
         string = "{class_str} stack_id: {class_id} with n images: {n}".format(class_str = self.__class__.__name__,class_id = self.id_z_stack,n = len(self.images))
@@ -313,6 +474,7 @@ class Image:
         
         self.combined_mask = Channel(combined_mask_path,-1,self.z_index)
         self.combined_mask.mask = combined_mask
+        self.combined_mask.mask_path = combined_mask_path
         self.combined_mask.find_contours()
         
         return None
@@ -407,7 +569,7 @@ class Image:
 class Channel: 
     def __init__(self,full_path,channel_index,z_index):
         '''
-        
+        channel_index : int : index of channels. Must start at 0 for first channel and iterate +1
         '''
         global VERBOSE 
         self.full_path = full_path 
@@ -422,6 +584,8 @@ class Channel:
         self.mask_path = None
         self.contours = None 
         self.n_contours = None
+
+        self.img_w_contour_path
         
         if VERBOSE: 
             print("Made channel: "+str(self))
@@ -438,6 +602,14 @@ class Channel:
             
             return image
     
+    def get_mask_as_file(self,mask_save_folder): 
+        if self.mask_path is not None: 
+            return self.mask_path
+        else: 
+            self.mask_path = os.path.join(mask_save_folder,str(self.file_id)+".png")
+            cv2.imwrite(self.mask_path,img)
+            return self.mask_path
+
     def get_mask(self):
         if self.mask is not None: 
             return self.mask
@@ -639,6 +811,21 @@ class Channel:
             for j in other_channel.contours:
                 i.is_inside(j)
         return None
+
+    def make_img_with_contours(self,img_w_contour_folder):
+        img = self.get_image()
+        contours = []
+        for i in self.contours: 
+            cv2.drawContours(img,[i.points],-1,(255,255,255),1)
+            x = i.data["centroid_x"]
+            y = i.data["centroid_y"]
+            cv2.putText(img,i.id_contour,(x,y),cv2.FONT_HERSHEY_SIMPLEX,0.4,(255,255,255),1,cv2.LINE_AA)
+        
+        img_w_contour_path = os.path.join(img_w_contour_folder,self.file_id+".png")
+        cv2.imwrite(img,img_w_contour_path)
+        
+        self.img_w_contour_path = img_w_contour_path
+
 
     def __lt__(self,other):
         return self.channel_index < other.channel_index 
@@ -901,4 +1088,166 @@ class Roi_3d:
     def __repr__(self):
         string = "{class_str} id: {class_id} built from n contours: {n}".format(class_str = self.__class__.__.name__,class_id = self.id_roi_3d,n = len(self.contours))
         return string
+
+class Image_in_pdf:
     
+    def __init__(x,y,img_path,data,x_vars,y_vars,image_vars):
+        '''
+        Information about single image that is needed to make Pdf document
+        
+        Params
+        x           : int         : Relative x position of image. zero-indexed
+        y           : int         : Relative y position of image. zero-indexed
+        data        : dict        : Dictionary with all the metadata about image to plot in annotation boxes around images
+        x_vars      : x_vars      : Variables in "data" to plot on x-axis annotation fields 
+        y_vars      : y_vars      : Variables in "data" to plot on y-axis annotation fields 
+        Image_vars  : list of str : Variables in "data" to plot on top of image
+        '''
+        self.x = x
+        self.y = y
+        self.img_path = img_path
+        self.data = data
+        self.x_vars = x_vars
+        self.y_vars = y_vars
+    
+
+class Pdf:
+
+    def __init__(save_path,images_in_pdf,image_dim):
+        '''
+        Plot images in a pdf sorted by info about images
+        
+        Params
+        save_path     : str                  : Path to save pdf in
+        images_in_pdf : list of Image_in_pdf : List of objects with information about image path, location in pdf and x and y variables to plot
+        image_dim     : tuple of int         : image format in pixels [width,height]. Adds grey border to images not in this aspect ratio 
+        '''
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfgen.canvas import Canvas
+        from reportlab.lib.utils import ImageReader 
+        from reportlab.lib.colors import Color
+        
+        self.save_path = save_path
+        self.images_in_pdf = images_in_pdf
+        self.image_dim = image_dim 
+    
+    def shorten_info(self,info):
+        # If info is larger than a certain length, shorten it 
+        short_info = info
+        if len(short_info)>22:
+            short_info = short_info.split(" = ")[1]
+            if len(short_info)>22:
+                short_info = short_info[0:22]
+        #print("info: "+info+"\tlen: "+str(len(info))+"\tshorten_info: "+short_info+"\tlen: "+str(len(short_info)))
+        return shorten_info 
+    
+    def draw_annotation_pdf(self,canvas,box_dims,vertical_text,text):
+        '''
+        Make an annotation box in your pdf document.  
+        Params
+        canvas     : reportlab.Canvas : pdf dokument to draw box in
+        box_dims   : tuple of float   : Position of box (x1,y1,width,height)
+        text_angle : float            : Angle to rotate text by 
+        '''
+        
+        canvas.setFont("Helvetica",8)
+        canvas.setStrokeColorRGB(1,1,1)
+        canvas.setFillColor(Color(0.8,0.8,0.8,alpha=0.8))
+        canvas.rect(box_dims[0],box_dims[1],box_dims[2],box_dims[3],fill=1,stroke=0)
+        canvas.setFillColor(Color(0,0,0,alpha=1))
+        
+        text_nudge = 3
+             
+        if vertical_text: 
+            x_text = box_dims[1]+(box_dims[3]/2) 
+            y_text = box_dims[0]+(box_dims[2]/2+text_nudge) 
+            canvas.saveState()
+            canvas.rotate(90)
+            canvas.drawCentredString(x_text,-y_text,text)
+            canvas.restoreState()
+        else: 
+            x_text = box_dims[0]+(box_dims[2]/2) 
+            y_text = box_dims[1]+(box_dims[3]/2-text_nudge) 
+            canvas.drawCentredString(x_text,y_text,text)
+
+    def make_pdf(self):
+        '''
+        Make PDF as specified
+        '''
+        canvas = Canvas(self.save_path,pagesize = A4)
+
+        c_width,c_height = A4
+
+        y_max = 0
+        x_max = 0
+        for i in self.images_in_pdf:
+            if i.x < x_max: 
+                x_max = i.x
+            if i.y < y_max: 
+                y_max = i.y
+
+        area_meta_yvars = (0,(len(self.images_in_pdf.x_vars))*15)
+        area_meta_xvars = (0,(len(self.images_in_pdf.y_vars))*15)
+        marg = 5
+        goal_aspect_ratio = self.image_dim[1]/self.image_dim[0]
+
+        img_width = (c_width-area_meta_yvars[1])/(x_max+1)
+        img_height = img_width * goal_aspect_ratio
+
+        if img_height > c_height: 
+            img_height = c_height
+        
+        y_img_per_page = int((c_height-area_meta_yvars[1])/img_height)
+        
+        yvars_box_width  = (area_meta_yvars[1]-area_meta_yvars[0])/(y_max+1)
+        xvars_box_height = (area_meta_xvars[1]-area_meta_yvars[0])/(x_max+1)
+         
+        page = 0
+        for img in self.images_in_pdf:
+            image = ImageReader(img.img_path)
+
+            x = (img.x*img_width) + area_meta_yvars[1]
+            y_position = img.y - (page*y_img_per_page) + 1
+            if y_position > y_img_per_page: 
+                page = page +1 
+                canvas.showPage()
+                y_position = y_position- y_img_per_page
+            y = c_height - ((y_position)*img_height)- area_meta_xvars[1]
+            
+            image_x = x+marg/2
+            image_y = y+marg/2
+            canvas.drawImage(image,image_x,image_y,width = img_width-marg, height = img_height-marg)
+            
+            image_info = None 
+            for j in img.image_vars: 
+                if image_info is None: 
+                    image_info = img.data[j]
+                else: 
+                    image_info = image_info + "   " +str(img.data[j])
+            
+            canvas.setFont("Helvetica",4)
+            canvas.setFillColorRGB(0.5,0.5,0.5)
+            canvas.drawString(image_x+1,image_y+1,image_info)       
+            
+            canvas.saveState()
+            
+            last_info = ""
+            for j in range(len(img.y_vars)): 
+                info = y_vars[j]+" = "+str(img.data[y_vars[j]])
+                if info != last_info:
+                    x_ymeta = yvars_box_width*j  
+                    self.draw_annotation_pdf(canvas,[x_ymeta+marg/4,y+marg/2,yvars_box_width-marg/2,img_height-marg],True,shorten_info(info))
+                    last_info = info
+            
+            last_info = ""
+            for j in range(len(x_vars)): 
+                info = x_vars[j]+" = "+str(img.data[x_vars[j]])
+                    
+                if info != last_info:
+                    y_xmeta = xvars_box_height*(j+1) 
+                    self.draw_annotation_pdf(canvas,[x+marg/2,c_height-(y_xmeta+marg/4),img_width-marg,xvars_box_height-marg/4],False,shorten_info(info))
+            canvas.restoreState()
+        canvas.save()
+
+        print("Saved pdf: "+save_path)
+

@@ -9,7 +9,7 @@ parser.add_argument('--raw_data',default="rawdata",type=str,help='Folder with al
 parser.add_argument('--out_projections',type=str,default = 'min_projections', help='Output folder for minimal projections')
 parser.add_argument('--out_contours',type=str,default = 'contours_stats', help='Output folder for stats about contours')
 parser.add_argument('--out_rois',type=str,default = 'rois_stats', help='Output folder for stats about 3d rois')
-parser.add_argument('--out_segmented',type=str,default = 'graphic_out_segment_raw', help='Output folder for graphical segmentation')
+parser.add_argument('--out_graphical',type=str,default = 'graphic_segmentation', help='Output folder for graphical representation of segmentation')
 parser.add_argument('--segment_settings',type=str,default = 'segment_settings.xlsx', help='Settings for each channels segmentation')
 parser.add_argument('--temp_folder',type=str,default='coco_temp',help="temp folder for storing temporary images. Must not exist before startup. default: ./ORGcount_temp")
 parser.add_argument('--cores',type=int,help='Number of cores to use. Default is number of cores minus 1.')
@@ -34,8 +34,7 @@ import cv2
 import numpy as np 
 import pandas as pd
 
-import utilities.general_functions as oc
-import utilities.image_processing_functions2 as oi
+import utilities.image_processing_functions as oi
 import utilities.classes as classes
 
 import pickle
@@ -49,7 +48,7 @@ if args.overwrite:
         raise ValueError("Could not delete temp_folder: "+args.temp_folder)
 
 os.makedirs(args.out_projections,exist_ok=True)
-os.makedirs(args.out_segmented,exist_ok=True)
+os.makedirs(args.out_graphical,exist_ok=True)
 os.makedirs(args.out_contours,exist_ok=True)
 os.makedirs(args.out_rois,exist_ok=True)
 os.makedirs(args.temp_folder,exist_ok = True)
@@ -108,7 +107,7 @@ def main(raw_img_path,info,segment_settings):
     
     print_str = info+"\traw_img_path: "+raw_img_path+"\t"
    
-    if os.path.exists(df_rois_path): 
+    if False:#os.path.exists(df_rois_path): 
         print(print_str+"3D ROIs already made, skipping this file")
     else:
         images_paths_file = "files_info.txt"
@@ -127,6 +126,7 @@ def main(raw_img_path,info,segment_settings):
        
         rois_3d = []
         for z in z_stacks:
+            z.make_projections()
             z.make_masks()
             z.find_contours()
             z.find_z_overlapping()
