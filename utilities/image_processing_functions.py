@@ -53,7 +53,6 @@ def img_paths_to_zstack_classes(img_paths,file_ending,segment_settings):
     img_paths        : list of str              : Paths to files extracted with bfconvert. Assumes file names according to following convention: {experiment}_{plate}_{time}_{well}_{img_numb}_{other_info}_INFO_{series_index}_{time_index}_{z_index}_{channel_index}{file_ending}
     file_ending      : str                      : File ending of file 
     segment_settings : list of Segment_settings : List of segment settings classes. One for each channel index
-    temp_folder      : str                      : Path to temporary folder for files such as masks and extracted xml files
     
     Returns
     z_stacks    : list of Zstack : Files organized into Zstack classes for further use
@@ -78,7 +77,12 @@ def img_paths_to_zstack_classes(img_paths,file_ending,segment_settings):
             this_image = this_z.loc[this_z["z_index"]==z_index,]
             channels = []
             for i in this_image.index: 
-                channel = classes.Channel(this_image.loc[i,"full_path"],this_image.loc[i,"channel_index"],this_image.loc[i,"z_index"])
+                color = None
+                for j in segment_settings: 
+                    if str(j.channel_index) == str(this_image.loc[i,"channel_index"]):
+                        color = j.color
+                        break 
+                channel = classes.Channel(this_image.loc[i,"full_path"],this_image.loc[i,"channel_index"],this_image.loc[i,"z_index"],color)
                 channels.append(channel)
             images.append(classes.Image(channels,z_index,segment_settings))
         
@@ -90,8 +94,8 @@ def img_paths_to_zstack_classes(img_paths,file_ending,segment_settings):
         other_info = this_z["other_info"].iloc[0]
         time_index = this_z["time_index"].iloc[0]
         series_index = this_z["series_index"].iloc[0]
-        shrink = 1 #TODO: add shrink parameter properly
 
         z_stacks.append(classes.Zstack(images,experiment,plate,time,well,img_numb,other_info,series_index,time_index))
         
     return z_stacks
+    

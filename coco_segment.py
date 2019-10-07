@@ -63,8 +63,7 @@ image_ids_all = os.listdir(args.raw_data)
 for i in range(len(image_ids_all)): 
     image_ids_all[i] = os.path.join(args.raw_data,image_ids_all[i])
 
-if args.debug or args.n_process is not None:
-    image_ids_all.sort()
+image_ids_all.sort()
 
 if not args.n_process is None:
     image_ids_all = image_ids_all[0:args.n_process]
@@ -76,6 +75,8 @@ if args.debug:
 classes.VERBOSE = args.verbose
 classes.CONTOURS_STATS_FOLDER = args.out_contours 
 classes.TEMP_FOLDER = args.temp_folder 
+classes.GRAPHICAL_SEGMENTATION_FOLDER = args.out_graphical
+
 print("Found {n_files} to process".format(n_files = len(image_ids_all)))
 
 df_segment_settings = pd.read_excel(args.segment_settings)
@@ -86,7 +87,7 @@ for channel in df_segment_settings["channel_index"]:
     if len(s["channel_index"])!=1:
         raise ValueError("Need at least one unique channel index in segment settings.")
     s = s.iloc[0,]
-    segment_settings_c = classes.Segment_settings(channel,s["shrink"],s["contrast"],s["auto_max"],s["thresh_type"],s["thresh_upper"],s["thresh_lower"],s["open_kernel"],s["close_kernel"],s["combine"])
+    segment_settings_c = classes.Segment_settings(channel,s["color"],s["contrast"],s["auto_max"],s["thresh_type"],s["thresh_upper"],s["thresh_lower"],s["open_kernel"],s["close_kernel"],s["combine"])
     segment_settings.append(segment_settings_c)
 
 def main(raw_img_path,info,segment_settings):
@@ -105,9 +106,13 @@ def main(raw_img_path,info,segment_settings):
     extracted_images_folder = os.path.join(args.temp_folder,"extracted_raw",img_id)
     df_rois_path = os.path.join(args.out_rois,img_id+".csv")
     
+    pickle_folder = os.path.join(args.temp_folder,"pickles")
+    os.makedirs(pickle_folder,exist_ok=True)
+    pickle_path = os.path.join(pickle_folder,img_id+".pickle")
+    
     print_str = info+"\traw_img_path: "+raw_img_path+"\t"
    
-    if False:#os.path.exists(df_rois_path): 
+    if os.path.exists(df_rois_path): 
         print(print_str+"3D ROIs already made, skipping this file")
     else:
         images_paths_file = "files_info.txt"
@@ -122,18 +127,31 @@ def main(raw_img_path,info,segment_settings):
             print(print_str+"Extracting images and building 3D ROIs")
             images_paths = oi.get_images(raw_img_path,extracted_images_folder,images_paths_file,bfconvert_info_str,file_ending)
         
-        z_stacks = oi.img_paths_to_zstack_classes(images_paths,file_ending,segment_settings)
-       
+        if not os.path.isfile(pickle_path): 
+            z_stacks = oi.img_paths_to_zstack_classes(images_paths,file_ending,segment_settings)
+            for z in z_stacks:
+                if args.verbose: 
+                    z.print_all()
+                z.make_projections()
+                z.make_masks()
+                z.make_combined_masks()
+                z.find_contours()
+                z.is_inside_combined()
+                z.find_z_overlapping()
+                z.update_contour_stats()
+                z.measure_channels()
+                z.write_contour_info()
+                
+                with open(pickle_path, 'wb') as handle:
+                    pickle.dump(z_stacks, handle, protocol=pickle.HIGHEST_PROTOCOL)
+        else: 
+            if args.verbose:
+                print("Reading z_stacks info from pickle file: "+pickle_path)
+            with open(pickle_path, 'rb') as handle:
+                z_stacks = pickle.load(handle)
+        
         rois_3d = []
-        for z in z_stacks:
-            z.make_projections()
-            z.make_masks()
-            z.find_contours()
-            z.find_z_overlapping()
-            z.is_inside_combined()
-            z.update_contour_stats()
-            z.measure_channels()
-            z.write_contour_info()
+        for z in z_stacks: 
             temp_rois_3d = z.get_rois_3d()
             for roi in temp_rois_3d: 
                 rois_3d.append(roi)
@@ -147,7 +165,9 @@ def main(raw_img_path,info,segment_settings):
             print("Writing df_rois to path: "+df_rois_path)
             print(df_rois)
         df_rois.to_csv(df_rois_path)
-
+        
+        for z in z_stacks: 
+            z.to_pdf()
     return None
 
 if args.cores is None:
