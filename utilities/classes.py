@@ -1,4 +1,5 @@
 import os
+import math
 import numpy as np
 import pandas as pd
 import cv2
@@ -47,7 +48,7 @@ class Segment_settings:
             b,g,r = color.split(",",3)
             self.color = (int(b),int(g),int(r))
         
-        self.contrast = self.to_int_or_none(contrast)
+        self.contrast = self.to_float_or_none(contrast)
         self.auto_max = self.to_bool_or_none(auto_max)
         
         assert thresh_type in self.AVAILABLE_THRESH_TYPES,"Chosen thresh type not in AVAILABLE_THRESH_TYPES: "+str(self.AVAILABLE_THRESH_TYPES)
@@ -57,16 +58,19 @@ class Segment_settings:
         thresh_lower = self.to_int_or_none(thresh_lower)
         
         if thresh_upper is not None: 
-            assert 0<thresh_upper<256,"thresh_upper not in range (0,255)"
+            assert 0<=thresh_upper<256,"thresh_upper not in range (0,255)"
         
         if thresh_lower is not None: 
-            assert 0<thresh_lower<256,"thresh_lower not in range (0,255)"
+            assert 0<=thresh_lower<256,"thresh_lower not in range (0,255)"
 
         if self.thresh_type == "binary": 
             assert thresh_upper == 255,"Upper threshold must be 255 if binary threshold"
 
         self.thresh_upper = thresh_upper 
         self.thresh_lower = thresh_lower
+
+        self.open_kernel_int = open_kernel
+        self.close_kernel_int = close_kernel
         self.open_kernel = self.make_kernel(open_kernel)
         self.close_kernel = self.make_kernel(close_kernel)
 
@@ -90,6 +94,13 @@ class Segment_settings:
         else: 
             kernel = None 
         return kernel
+     
+    def to_float_or_none(self,value): 
+        # If value is not none, turn it into a int
+        if value is not None: 
+            return float(value)
+        else: 
+            return None
     
     def to_int_or_none(self,value): 
         # If value is not none, turn it into a int
@@ -104,10 +115,23 @@ class Segment_settings:
             return bool(value)
         else: 
             return None
-
+    
+    def get_dict(self):
+        data = {
+            "channel_index":self.channel_index,
+            "color":self.color,
+            "contrast":self.contrast,
+            "auto_max":self.auto_max,
+            "thresh_type":self.thresh_type,
+            "thresh_upper":self.thresh_upper,
+            "thresh_lower":self.thresh_lower,
+            "close_kernel":self.close_kernel_int,
+            "open_kernel":self.open_kernel_int
+        }
+        return data
 
     def __repr__(self):
-        string = "{class_str}: channel = {ch}, color = {col},contrast = {c},auto_max = {a},thresh_type = {tt},thresh_upper = {tu}, thresh_lower = {tl},open_kernel = {ok}, close_kernel = {ck}".format(class_str = self.__class__.__name__,ch = self.channel_index,col=self.color,c=self.contrast,a=self.auto_max,tt=self.thresh_type,tu=self.thresh_upper,tl=self.thresh_lower,ok = self.open_kernel,ck = self.close_kernel)
+        string = "{class_str}: channel = {ch}, color = {col},contrast = {c},auto_max = {a},thresh_type = {tt},thresh_upper = {tu}, thresh_lower = {tl},open_kernel = {ok}, close_kernel = {ck}".format(class_str = self.__class__.__name__,ch = self.channel_index,col=self.color,c=self.contrast,a=self.auto_max,tt=self.thresh_type,tu=self.thresh_upper,tl=self.thresh_lower,ok = self.open_kernel_int,ck = self.close_kernel_int)
         return string
 
 class Zstack: 
@@ -631,7 +655,7 @@ class Channel:
         auto_max               : bool : Make the highest intensity pixel the highest in image
         colorize               : bool : Convert grayscale image to color as specified in channel color
         '''
-        if not scale_bar and not auot_max and not colorize: 
+        if not scale_bar and not auto_max and not colorize: 
             self.img_for_viewing_path = self.full_path 
             return None
 
@@ -750,13 +774,13 @@ class Channel:
         else: 
             raise RuntimeError("Need to create mask before it can be returned")
 
-    def make_mask(self,segment_settings,mask_save_folder):
+    def make_mask(self,segment_settings,mask_save_folder = None):
         '''
         Generate a mask image of the channel where 255 == true pixel, 0 == false pixel 
 
         Params
         segment_settings : Segment_settings : Object containing all the segment settings
-        mask_save_folder : str              : where to save the output folder
+        mask_save_folder : str              : where to save the output folder. If none, masks are forced to be saved in memory
         
         '''
         
@@ -765,8 +789,9 @@ class Channel:
         
         s = segment_settings 
         
-        if (s.contrast !=1) and s.contrast is not None:
-            img = (img*s.contrast).astype('uint8')
+        if s.contrast is not None: 
+            if not (0.99 < s.contrast < 1.001 ):
+                img = (img*s.contrast).astype('uint8')
         
         if s.auto_max is not None: 
             if s.auto_max: 
@@ -776,21 +801,26 @@ class Channel:
         if s.thresh_type is not None and not (str(s.thresh_type)+" " == "nan "): 
             if s.thresh_type == "canny_edge": 
                 img = cv2.Canny(img,s.thresh_lower,s.thresh_upper)
-            elif s.thresh_type == "binary": 
+            elif s.thresh_type == "binary":
                 ret,img = cv2.threshold(img,s.thresh_lower,s.thresh_upper,cv2.THRESH_BINARY)
             else:
                 raise ValueError(str(thresh_type)+" is not an available threshold method")
 
-            if type(s.open_kernel) is np.ndarray:  
-                img = cv2.morphologyEx(img, cv2.MORPH_OPEN, s.open_kernel)
-            
             if type(s.close_kernel) is np.ndarray:  
                 img = cv2.morphologyEx(img,cv2.MORPH_CLOSE,s.close_kernel)
+            
+            if type(s.open_kernel) is np.ndarray:  
+                img = cv2.morphologyEx(img, cv2.MORPH_OPEN, s.open_kernel)
         
         assert img is not None, "Mask is none after running function. That should not happen"
-
-        global MASKS_IN_MEMORY 
-        if MASKS_IN_MEMORY: 
+        
+        if mask_save_folder is None: 
+            mask_in_memory = True
+        else: 
+            global MASKS_IN_MEMORY
+            mask_in_memory = MASKS_IN_MEMORY
+        
+        if mask_in_memory: 
             self.mask = img
         else: 
             self.mask_path = os.path.join(mask_save_folder,str(self.file_id)+".png")
@@ -1327,9 +1357,12 @@ class Pdf:
             y_text = box_dims[1]+(box_dims[3]/2-text_nudge) 
             canvas.drawCentredString(x_text,y_text,text)
 
-    def make_pdf(self):
+    def make_pdf(self,annotate_box_height = 10):
         '''
         Make PDF as specified
+        
+        Params
+        annotate_box_width : int : Height of annotation box in same direction as text
         '''
         
         if VERBOSE: 
@@ -1351,8 +1384,8 @@ class Pdf:
             if i.y > y_max: 
                 y_max = i.y
 
-        area_meta_yvars = (0,(len(self.images_in_pdf[0].y_vars))*15)
-        area_meta_xvars = (0,(len(self.images_in_pdf[0].x_vars))*15)
+        area_meta_yvars = (0,(len(self.images_in_pdf[0].y_vars))*annotate_box_height)
+        area_meta_xvars = (0,(len(self.images_in_pdf[0].x_vars))*annotate_box_height)
         marg = 2
         goal_aspect_ratio = self.image_dim[1]/self.image_dim[0]
 
@@ -1362,7 +1395,7 @@ class Pdf:
         if img_height > c_height: 
             img_height = c_height
         
-        y_img_per_page = int((c_height-area_meta_yvars[1])/img_height)-1
+        y_img_per_page = math.floor((c_height-area_meta_yvars[1])/img_height)
         
         yvars_box_width  = (area_meta_yvars[1]-area_meta_yvars[0])/(len(self.images_in_pdf[0].y_vars))
         xvars_box_height = (area_meta_xvars[1]-area_meta_yvars[0])/(len(self.images_in_pdf[0].x_vars))

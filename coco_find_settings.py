@@ -5,12 +5,13 @@
 #######################
 import argparse
 parser = argparse.ArgumentParser(description = 'Process one of the confocal images with a multitude of segmentation settings to find the best settings. ')
-parser.add_argument('--raw_data',default="rawdata",type=str,help='Path to raw image. If a folder is submitted the alfabetically first is choosen. Can use all formats accepted by your installed version of bftools. ')
-parser.add_argument('--results',type=str,default = 'segment_test', help='Output folder for segmentation test results')
-parser.add_argument('--config_file',type = int,default=None,help='Output config file for parameters to test. If no input a standard set is tested.')
-parser.add_argument('--z_toshow',type = str,default="i3",help='z-slices to include. "1:3" = [1,2,3],"1,5,8" = [1,5,8] and "i3" = 3 evenly choosen from range. Default = "i3"')
-parser.add_argument('--temp_folder',type=str,default='coco_temp',help="temp folder for storing temporary images. Must not exist before startup. default: ./coco_temp")
-parser.add_argument('--cores',type=int,help='Number of cores to use. Default is number of cores minus 1.')
+parser.add_argument('--raw_data',default="rawdata",type=str,help='Path to raw image or folder with raw images. If a folder is submitted the alfabetically first is choosen. Can use all formats accepted by your installed version of bftools. ')
+parser.add_argument('--out_folder',type=str,default = 'find_segment_settings', help='Output folder for segmentation test results')
+parser.add_argument('--config_file',type = str,default="find_segment_settings/test_settings.xlsx",help='Input config file for parameters to test. If file does not exists, a standard set of test settings is used and these settings are written to file.')
+parser.add_argument('--z_toshow',type = str,default="i5",help='z-slices to include. "1:3" = [1,2,3],"1,5,8" = [1,5,8] and "i3" = 3 evenly choosen from range. Default = "i3"')
+parser.add_argument('--temp_folder',type=str,default='coco_temp',help="temp folder for storing temporary images. default: ./coco_temp")
+parser.add_argument('--debug',action='store_true',default=False,help='Run in verbose mode')
+parser.add_argument('--verbose',action='store_true',default=False,help='Verbose mode')
 args = parser.parse_args()
 
 ########################
@@ -18,8 +19,6 @@ args = parser.parse_args()
 ########################
 import os
 
-#if os.path.isdir(args.temp_folder):
-#    raise ValueError('--temp_folder already exists. This one is deleted by the program and must be clean')
 import math
 import time
 import datetime
@@ -31,98 +30,172 @@ import cv2
 import numpy as np 
 import pandas as pd
 
-import utilities.general_functions as oc
 import utilities.image_processing_functions as oi
+import utilities.classes as classes
 
-def choose_z_slices(all_z_slices,to_choose):
-    '''
-    Extract only some of the z-slices
-    
-    Params
-    all_z_slices : list of str : All available z-slices
-    to_choose    : str         : which z_slice to choose. "1:3" = [1,2,3],"1,5,8" = [1,5,8] and "i3" = 3 evenly choosen from range.
+FOLDER_OF_SCRIPT = os.path.split(os.path.realpath(__file__))[0]
+CONFIG_DEFAULT_FILE = os.path.join(FOLDER_OF_SCRIPT,"utilities","test_settings.xlsx")
 
-    Return
-    choosen_z_slices : list of str : z_slices to process
-    '''
-    choosen_z_slices = []
-    if "i" in to_choose:
-        i_to_keep = int(args.z_toshow.replace("i",""))
-        step_size = math.ceil(len(all_z_slices)/i_to_keep)
-
-        for i in range(0,len(all_z_slices),step_size):
-            choosen_z_slices.append("Z"+str(i))
-    elif "," in to_choose:
-        temp = args.split(",")
-        for i in range(len(temp)):
-            choosen_z_slices.append("Z"+str(int(temp[i])))
-    else: 
-        choosen_z_slices.append("Z"+int(to_choose))
-
-    return choosen_z_slices
+def force_delete_folder(folder):
+    exit_code = os.system('rm -rf '+folder)
+    if exit_code != 0: 
+        raise ValueError("Could not delete folder: " + folder)
 
 ##############################
 # Run program
 ##############################
-os.makedirs(args.results,exist_ok=True)
-os.makedirs(args.temp_folder,exist_ok = True)
+os.makedirs(args.out_folder,exist_ok=True)
+os.makedirs(args.temp_folder,exist_ok=True)
 
-temp_mask_folder = os.path.join(args.temp_folder,"masks")
-os.makedirs(temp_mask_folder,exist_ok=True)
+pdf_save_folder = os.path.join(args.out_folder,"segmented_pdfs")
+os.makedirs(pdf_save_folder,exist_ok=True)
 
-if os.path.isdir(args.raw_data):
-    image_path_all = os.listdir(args.raw_data)
-    image_path_all.sort()
-    image_path = os.path.join(args.raw_data,image_path_all[0])
+img_for_viewing_folder = os.path.join(args.temp_folder,"find_settings_for_viewing")
+force_delete_folder(img_for_viewing_folder)
+os.makedirs(img_for_viewing_folder,exist_ok=True)
+
+mask_save_folder = os.path.join(args.temp_folder,"test_settings_masks")
+force_delete_folder(mask_save_folder)
+os.makedirs(mask_save_folder,exist_ok=True)
+
+if args.debug: 
+    args.verbose = True
+
+classes.VERBOSE = args.verbose
+classes.TEMP_FOLDER = args.temp_folder
+
+if os.path.isdir(args.raw_data): 
+    raw_imgs = os.listdir(args.raw_data)
+    print("Found {n} files in raw folder".format(n = len(raw_imgs)))
+
+    raw_imgs.sort()
+    raw_img_path = os.path.join(args.raw_data,raw_imgs[0])
+elif os.path.isfile(args.raw_data):
+    raw_img_path = args.raw_data
 else: 
-    image_path = args.raw_data
+    raise ValueError("--raw_data did not supply a valid path or folder")
 
-image_id,extension = os.path.splitext(image_path)
-folder,image_id = os.path.split(image_id)
+print("Processing image: "+raw_img_path)
 
-print("Processing image {image}".format(image = image_id))
+img_id = os.path.splitext(os.path.split(raw_img_path)[1])[0]
 
-#images_paths = oi.get_images(image_path,args.temp_folder)
-#images_paths.to_csv(os.path.join(args.temp_folder,"images_path.csv"))
-images_paths = pd.read_csv(os.path.join(args.temp_folder,"images_path.csv"),index_col = 0)
+extracted_images_folder = os.path.join(args.temp_folder,"extracted_raw",img_id)
 
-choosen_z_slices = choose_z_slices(images_paths["Z_index"].unique(),args.z_toshow)
-images_paths = images_paths[images_paths["Z_index"].isin(choosen_z_slices)]
-
-full_path = []
-for i in images_paths.index:
-    full_path.append(os.path.join(images_paths.loc[i,"root"],images_paths.loc[i,"file"]))
-images_paths["full_path"] = full_path
-
-test_settings = oi.make_test_settings_df(images_paths["full_path"],temp_mask_folder)
-test_settings = test_settings.merge(images_paths.drop(["root","file","info"],axis='columns'),left_on="image_path",right_on="full_path")
-
-test_settings.to_csv(os.path.join(args.temp_folder,"test_settings.csv"))
-
-if args.cores is None:
-    cores = mp.cpu_count()-1
+images_paths_file = "files_info.txt"
+bfconvert_info_str = "_INFO_%s_%t_%z_%c"
+file_ending = ".ome.tiff"
+if os.path.isfile(os.path.join(extracted_images_folder,images_paths_file)): 
+    print("Images already extracted from raw files, using those.")
+    with open(os.path.join(extracted_images_folder,images_paths_file),'r') as f: 
+        images_paths = f.read().splitlines()
 else:
-    cores = args.cores
+    print("Extracting images...")
+    images_paths = oi.get_images(raw_img_path,extracted_images_folder,images_paths_file,bfconvert_info_str,file_ending)
 
-tot_test_images = len(test_settings.index)
-image_info = []
-if cores==1: 
-    for i in test_settings.index:
-        info = str(i)+"/"+str(tot_test_images)
-        image_info.append(oi.get_processed_mask(test_settings.loc[i,"image_path"],info,test_settings.loc[i,"shrink"],test_settings.loc[i,"contrast"],test_settings.loc[i,"auto_max"],test_settings.loc[i,"thresh_type"],test_settings.loc[i,"thresh_upper"],test_settings.loc[i,"thresh_lower"],test_settings.loc[i,"open_kernel"],test_settings.loc[i,"close_kernel"],test_settings.loc[i,"mask_path"]))
+if args.verbose: print("Converting image paths to channels.",end = " ")
+channels = oi.img_paths_to_channel_classes(images_paths,file_ending)
 
-else: 
-    pool = mp.Pool(cores)
+if not os.path.exists(args.config_file): 
+    if args.verbose: print("Making test settings from defaults and writing them to file: "+str(args.config_file))
+    shutil.copyfile(CONFIG_DEFAULT_FILE,args.config_file)
+else:
+    if args.verbose: print("Making test settings from file: "+str(args.config_file))
 
-    for i in test_settings.index: 
-        info = str(i)+"/"+str(tot_test_images)
-        image_info.append(pool.apply_async(oi.get_processed_mask,args=(test_settings.loc[i,"image_path"],info,test_settings.loc[i,"shrink"],test_settings.loc[i,"contrast"],test_settings.loc[i,"auto_max"],test_settings.loc[i,"thresh_type"],test_settings.loc[i,"thresh_upper"],test_settings.loc[i,"thresh_lower"],test_settings.loc[i,"open_kernel"],test_settings.loc[i,"close_kernel"],test_settings.loc[i,"mask_path"])))
+test_settings = oi.make_test_settings(args.config_file)
+print("Made {n} test settings".format(n=len(test_settings)))
 
-    pool.close()
-    pool.join()
+df = pd.DataFrame({"channel":channels,"z_toshow":False,"z_index":None})
 
-    image_info = [x.get() for x in image_info]
+all_z_indexes = []
+for i in channels: 
+    all_z_indexes.append(int(i.z_index))
+all_z_indexes = list(set(all_z_indexes))
+all_z_indexes.sort()
 
-df_plot = oi.plot_images_pdf(test_settings,["channel_index","series_index","T_index"],["Z_index"],["processed","auto_max","shrink","thresh_type","thresh_upper","thresh_lower","contrast","open_kernel","close_kernel"],(512,512))
+choosen_z = oi.choose_z_slices(all_z_indexes,args.z_toshow)
+
+for i in df.index:
+    df.loc[i,"z_index"] = int(df.loc[i,"channel"].z_index) 
+    df.loc[i,"channel_index"] = df.loc[i,"channel"].channel_index
+    if df.loc[i,"z_index"] in choosen_z:
+        df.loc[i,"z_toshow"] = True
+
+print("Out of {tot_z} z_slices we are displaying {n}".format(tot_z = len(df.index),n = sum(df["z_toshow"])))
+
+df = df.loc[df["z_toshow"],]
+
+for i in df.index: 
+    df.loc[i,"img_dim"] = str(df.loc[i,"channel"].get_image().shape)
+
+img_dim = (None,None)
+temp = str(df["img_dim"].mode()[0]).replace("(","").replace(")","").split(",",1)
+img_dim = (int(temp[0]),int(temp[1]))
+
+setting_counter = 0
+
+for i in df["channel_index"].unique():
+    this_channel = df.loc[df["channel_index"]==i,]
+
+    pdf_save_path = os.path.join(pdf_save_folder,img_id+"_C"+str(i)+".pdf")
+    print("Making PDF: "+pdf_save_path) 
+
+    pdf_imgs = []
+    x = 0
+    y = 0
+    x_vars = ["z_index"]
+    y_vars = ["contrast","auto_max","thresh_type","thresh_upper","thresh_lower","open_kernel","close_kernel"]
+    image_vars = ["file_id"]
+    data = {}
+    for field in x_vars+y_vars+image_vars:
+        data[field] = None
+
+    for j in this_channel.index:
+        c = this_channel.loc[j,"channel"]
+        data["file_id"]  = c.full_path 
+        data["z_index"]  = this_channel.loc[j,"z_index"]
+        data["auto_max"] = False
+        pdf_imgs.append(classes.Image_in_pdf(x,y,c.full_path,data.copy(),x_vars,y_vars,image_vars))
+        x = x + 1 
+    y = y +1
+    x = 0
+
+    for j in this_channel.index:
+        c = this_channel.loc[j,"channel"]
+
+        c.make_img_for_viewing(img_for_viewing_folder,scale_bar=False,auto_max=True,colorize=False)
+        
+        data["file_id"]  = c.img_for_viewing_path 
+        data["z_index"]  = this_channel.loc[j,"z_index"]
+        data["auto_max"] = True
+        pdf_imgs.append(classes.Image_in_pdf(x,y,c.img_for_viewing_path,data.copy(),x_vars,y_vars,image_vars))
+        x = x + 1 
+    y = y + 1 
+    x = 0
+    
+    for s in test_settings: 
+        for j in this_channel.index:
+            c = this_channel.loc[j,"channel"]
+            
+            c.make_mask(s)
+            mask = c.get_mask()
+            mask_path = os.path.join(mask_save_folder,c.file_id+"_"+str(setting_counter)+".png")
+            setting_counter = setting_counter + 1
+            cv2.imwrite(mask_path,mask)
+            '''
+            print(data)
+            print(s.get_dict())
+            print("\n\n")
+            '''
+            data["file_id"]  = mask_path
+            data["z_index"]  = this_channel.loc[j,"z_index"]
+            data.update(s.get_dict())
+            pdf_imgs.append(classes.Image_in_pdf(x,y,mask_path,data.copy(),x_vars,y_vars,image_vars))
+            x = x + 1 
+        y = y + 1
+        x = 0
+
+    pdf = classes.Pdf(pdf_save_path,pdf_imgs,img_dim)
+    pdf.make_pdf()
+
 
 

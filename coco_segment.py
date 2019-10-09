@@ -14,7 +14,7 @@ parser.add_argument('--segment_settings',type=str,default = 'segment_settings.xl
 parser.add_argument('--temp_folder',type=str,default='coco_temp',help="temp folder for storing temporary images. Must not exist before startup. default: ./ORGcount_temp")
 parser.add_argument('--cores',type=int,help='Number of cores to use. Default is number of cores minus 1.')
 parser.add_argument('--n_process',type=int,help='Process the n first alphabetically sorted files')
-parser.add_argument('--debug',action='store_true',default=False,help='Run in verbose mode, files alfabetically, and with one core for debugging')
+parser.add_argument('--debug',action='store_true',default=False,help='Run in verbose mode and with one core for debugging')
 parser.add_argument('--verbose',action='store_true',default=False,help='Verbose mode')
 parser.add_argument('--overwrite',action = 'store_true',default=False,help='Overwrite all files rather than re-using exisiting files. NB! does this by deleting --temp_folder and all its content')
 args = parser.parse_args()
@@ -120,7 +120,7 @@ def main(raw_img_path,info,segment_settings):
         file_ending = ".ome.tiff"
 
         if os.path.isfile(os.path.join(extracted_images_folder,images_paths_file)): 
-            print(print_str+"Images already extracted, using those to build 3D ROIs.")
+            print(print_str+"Images already extracted from raw files, using those to build 3D ROIs.")
             with open(os.path.join(extracted_images_folder,images_paths_file),'r') as f: 
                 images_paths = f.read().splitlines()
         else:
