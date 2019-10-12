@@ -7,7 +7,7 @@ import argparse
 parser = argparse.ArgumentParser(description = 'Process one of the confocal images with a multitude of segmentation settings to find the best settings. ')
 parser.add_argument('--raw_data',default="rawdata",type=str,help='Path to raw image or folder with raw images. If a folder is submitted the alfabetically first is choosen. Can use all formats accepted by your installed version of bftools. ')
 parser.add_argument('--out_folder',type=str,default = 'find_segment_settings', help='Output folder for segmentation test results')
-parser.add_argument('--config_file',type = str,default="find_segment_settings/test_settings.xlsx",help='Input config file for parameters to test. If file does not exists, a standard set of test settings is used and these settings are written to file.')
+parser.add_argument('--annotation_file',type=str,default='annotation1.xlsx',help="Excel file with test settings to try all combinations of. Make it with coco_make_annotation_file.py.")
 parser.add_argument('--z_toshow',type = str,default="i5",help='z-slices to include. "1:3" = [1,2,3],"1,5,8" = [1,5,8] and "i3" = 3 evenly choosen from range. Default = "i3"')
 parser.add_argument('--temp_folder',type=str,default='coco_temp',help="temp folder for storing temporary images. default: ./coco_temp")
 parser.add_argument('--debug',action='store_true',default=False,help='Run in verbose mode')
@@ -18,12 +18,6 @@ args = parser.parse_args()
 # Imports 
 ########################
 import os
-
-import math
-import time
-import datetime
-import shutil
-import random
 import multiprocessing as mp 
 
 import cv2
@@ -33,30 +27,27 @@ import pandas as pd
 import utilities.image_processing_functions as oi
 import utilities.classes as classes
 
-FOLDER_OF_SCRIPT = os.path.split(os.path.realpath(__file__))[0]
-CONFIG_DEFAULT_FILE = os.path.join(FOLDER_OF_SCRIPT,"utilities","test_settings.xlsx")
-
-def force_delete_folder(folder):
-    exit_code = os.system('rm -rf '+folder)
-    if exit_code != 0: 
-        raise ValueError("Could not delete folder: " + folder)
-
 ##############################
 # Run program
 ##############################
-os.makedirs(args.out_folder,exist_ok=True)
-os.makedirs(args.temp_folder,exist_ok=True)
+if not os.path.exists(args.annotation_file): 
+    cmd = "coco_make_annotation_file.py"
+    exit_code = os.system(cmd)
+    if exit_code != 0: 
+        raise RunTimeError("Command did not finish properly. cmd: "+cmd)
 
 pdf_save_folder = os.path.join(args.out_folder,"segmented_pdfs")
-os.makedirs(pdf_save_folder,exist_ok=True)
-
 img_for_viewing_folder = os.path.join(args.temp_folder,"find_settings_for_viewing")
-force_delete_folder(img_for_viewing_folder)
+mask_save_folder = os.path.join(args.temp_folder,"test_settings_masks")
+
+os.makedirs(args.out_folder,exist_ok=True)
+os.makedirs(args.temp_folder,exist_ok=True)
+os.makedirs(pdf_save_folder,exist_ok=True)
+os.makedirs(mask_save_folder,exist_ok=True)
 os.makedirs(img_for_viewing_folder,exist_ok=True)
 
-mask_save_folder = os.path.join(args.temp_folder,"test_settings_masks")
-force_delete_folder(mask_save_folder)
-os.makedirs(mask_save_folder,exist_ok=True)
+oi.delete_folder_with_content(img_for_viewing_folder)
+oi.delete_folder_with_content(mask_save_folder)
 
 if args.debug: 
     args.verbose = True
@@ -95,13 +86,8 @@ else:
 if args.verbose: print("Converting image paths to channels.",end = " ")
 channels = oi.img_paths_to_channel_classes(images_paths,file_ending)
 
-if not os.path.exists(args.config_file): 
-    if args.verbose: print("Making test settings from defaults and writing them to file: "+str(args.config_file))
-    shutil.copyfile(CONFIG_DEFAULT_FILE,args.config_file)
-else:
-    if args.verbose: print("Making test settings from file: "+str(args.config_file))
-
-test_settings = oi.make_test_settings(args.config_file)
+if args.verbose: print("Making test settings from file: "+str(args.annotation_file))
+test_settings = oi.make_test_settings(args.annotation_file)
 print("Made {n} test settings".format(n=len(test_settings)))
 
 df = pd.DataFrame({"channel":channels,"z_toshow":False,"z_index":None})

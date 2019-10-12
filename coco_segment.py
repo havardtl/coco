@@ -5,29 +5,23 @@
 #######################
 import argparse
 parser = argparse.ArgumentParser(description = 'Segment objects in confocal images and extracts their information.')
-parser.add_argument('--raw_data',default="rawdata",type=str,help='Folder with all raw data. Can use all formats accepted by your installed version of bftools. ')
-parser.add_argument('--out_projections',type=str,default = 'min_projections', help='Output folder for minimal projections')
+parser.add_argument('--raw_data',default="rawdata",type=str,help='Folder with all raw data. Does not look for files in sub-folders. Can use all formats accepted by your installed version of bftools. ')
+parser.add_argument('--annotation_file',type=str,default='annotation1.xlsx',help="Excel file with segmentation settings for channels. Make it with coco_make_annotation_file.py.")
 parser.add_argument('--out_contours',type=str,default = 'contours_stats', help='Output folder for stats about contours')
 parser.add_argument('--out_rois',type=str,default = 'rois_stats', help='Output folder for stats about 3d rois')
 parser.add_argument('--out_graphical',type=str,default = 'graphic_segmentation', help='Output folder for graphical representation of segmentation')
-parser.add_argument('--segment_settings',type=str,default = 'segment_settings.xlsx', help='Settings for each channels segmentation')
 parser.add_argument('--temp_folder',type=str,default='coco_temp',help="temp folder for storing temporary images. Must not exist before startup. default: ./ORGcount_temp")
 parser.add_argument('--cores',type=int,help='Number of cores to use. Default is number of cores minus 1.')
 parser.add_argument('--n_process',type=int,help='Process the n first alphabetically sorted files')
 parser.add_argument('--debug',action='store_true',default=False,help='Run in verbose mode and with one core for debugging')
 parser.add_argument('--verbose',action='store_true',default=False,help='Verbose mode')
-parser.add_argument('--overwrite',action = 'store_true',default=False,help='Overwrite all files rather than re-using exisiting files. NB! does this by deleting --temp_folder and all its content')
+parser.add_argument('--overwrite',action = 'store_true',default=False,help='Overwrite all files rather than re-using exisiting files. NB! does this by deleting --temp_folder, --out_rois, --out_graphical, --out_contours and all their content')
 args = parser.parse_args()
 
 ########################
 # Imports 
 ########################
 import os
-
-import time
-import datetime
-import shutil
-import random
 import multiprocessing as mp 
 
 import cv2
@@ -42,22 +36,20 @@ import pickle
 ##############################
 # Run program
 ##############################
-if args.overwrite: 
-    exit_code = os.system('rm -rf '+args.temp_folder)
+if not os.path.exists(args.annotation_file): 
+    cmd = "coco_make_annotation_file.py"
+    exit_code = os.system(cmd)
     if exit_code != 0: 
-        raise ValueError("Could not delete temp_folder: "+args.temp_folder)
+        raise RunTimeError("Command did not finish properly. cmd: "+cmd)
 
-os.makedirs(args.out_projections,exist_ok=True)
+if args.overwrite: 
+    for folder in [args.temp_folder,args.out_rois,args.out_graphical,args.out_contours]:
+        oi.delete_folder_with_content(folder)
+
 os.makedirs(args.out_graphical,exist_ok=True)
 os.makedirs(args.out_contours,exist_ok=True)
 os.makedirs(args.out_rois,exist_ok=True)
 os.makedirs(args.temp_folder,exist_ok = True)
-
-extracted_raw_folder = os.path.join(args.temp_folder,"extracted_raw")
-
-os.makedirs(extracted_raw_folder,exist_ok = True)
-
-df_all = pd.DataFrame()
 
 image_ids_all = os.listdir(args.raw_data)
 for i in range(len(image_ids_all)): 
@@ -78,17 +70,7 @@ classes.TEMP_FOLDER = args.temp_folder
 classes.GRAPHICAL_SEGMENTATION_FOLDER = args.out_graphical
 
 print("Found {n_files} to process".format(n_files = len(image_ids_all)))
-
-df_segment_settings = pd.read_excel(args.segment_settings)
-
-segment_settings = []
-for channel in df_segment_settings["channel_index"]: 
-    s = df_segment_settings.loc[df_segment_settings["channel_index"]==channel,]
-    if len(s["channel_index"])!=1:
-        raise ValueError("Need at least one unique channel index in segment settings.")
-    s = s.iloc[0,]
-    segment_settings_c = classes.Segment_settings(channel,s["color"],s["contrast"],s["auto_max"],s["thresh_type"],s["thresh_upper"],s["thresh_lower"],s["open_kernel"],s["close_kernel"],s["combine"])
-    segment_settings.append(segment_settings_c)
+segment_settings = oi.excel_to_segment_settings(args.annotation_file)
 
 def main(raw_img_path,info,segment_settings):
     '''
@@ -132,7 +114,6 @@ def main(raw_img_path,info,segment_settings):
             for z in z_stacks:
                 if args.verbose: 
                     z.print_all()
-                z.make_projections()
                 z.make_masks()
                 z.make_combined_masks()
                 z.find_contours()

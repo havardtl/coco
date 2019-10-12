@@ -19,17 +19,20 @@ from io import StringIO
 import re
 import pandas as pd
 
+import utilities.classes as classes
+
 ########################
 # Script 
 ########################
+print("Making annotation file: "+args.annotation_file)
+
+file_id = os.listdir(args.raw_data)
 raw_files = []
-file_id = []
-for root, dirs, files in os.walk(args.raw_data):
-    for f in files: 
-        raw_files.append(os.path.join(root,f))
-        file_id.append(os.path.splitext(f)[0])
+for i in range(len(file_id)): 
+    raw_files.append(os.path.join(args.raw_data,file_id[i]))
+    file_id[i] = os.path.splitext(file_id[i])[0]
         
-if len(raw_files)<1:
+if len(file_id)<1:
     raise ValueError("Did not find any raw files in "+args.raw_data)
 
 df = pd.DataFrame(data = {"file_path":raw_files,"file_id":file_id,"treatment":None,"is_control":False,"stain_group":None})
@@ -58,6 +61,7 @@ if exp_setup_file is not None:
         first_line = sample_info.find("\n")
         sample_info = sample_info[(first_line+1):]
     
+    #Convert sample_info from tabular or white space format to csv format 
     sample_info = sample_info.strip()
     sample_info = sample_info.replace(";",",")
     if sample_info.count(",")<=(sample_info.count("\n")-1):
@@ -72,10 +76,11 @@ if exp_setup_file is not None:
     
     exp_df = pd.read_csv(exp_stringio,sep=",")
     
-    df["exp"],df["plate"],df["day"],df["well"],df["object"],df["other_info"] = df["file_id"].str.split("_",5).str
+    df["exp"],df["plate"],df["day"],df["well"],df["img_numb"],df["other_info"] = df["file_id"].str.split("_",5).str
     
     df["well_id"] = df["exp"]+"_"+df["plate"]+"_"+df["well"]
     
+    #Replacing default columns if they are present in experiment info
     if "treatment" in exp_df.columns:
         df.drop("treatment",axis="columns",inplace=True)
     if "stain_group" in exp_df.columns:
@@ -84,9 +89,11 @@ if exp_setup_file is not None:
         df.drop("is_control",axis="columns",inplace=True)
     
     df = df.merge(exp_df,on="well_id",how="left")
+    
 print(df)
+
 #Make sheet with plotting information for all variables
-always_present = ["channel","time" ,"series","img_dim"]
+always_present = ["channel_index","time_index" ,"series_index","img_dim"]
 plot_axis      = ["x"      ,"y"    ,"y"     ,None     ]
 importance     = [1        ,1      ,2       ,0        ]
 in_annotation  = list(df.columns)
@@ -105,9 +112,15 @@ plot_vars.loc[plot_vars["variable"]=="is_control","sort_ascending"] = False
 
 plot_vars.sort_values(by = ["plot_axis","importance","variable"],ascending=False,axis="index",inplace=True)
 
+#Import defaults from DEFAULT_SETTINGS_XLSX
+test_settings    = pd.read_excel(classes.DEFAULT_SETTINGS_XLSX,sheet_name = classes.TEST_SETTINGS_SHEET)
+segment_settings = pd.read_excel(classes.DEFAULT_SETTINGS_XLSX,sheet_name = classes.SEGMENT_SETTINGS_SHEET)
+
 with pd.ExcelWriter(args.annotation_file) as writer: 
-    df.to_excel(writer,sheet_name="annotation")
-    plot_vars.to_excel(writer,sheet_name="plot_vars")
+    df.to_excel(writer,sheet_name=classes.ANNOTATION_SHEET,index=False)
+    plot_vars.to_excel(writer,sheet_name=classes.PLOT_VARS_SHEET,index=False)
+    test_settings.to_excel(writer,sheet_name=classes.TEST_SETTINGS_SHEET,index=False)
+    segment_settings.to_excel(writer,sheet_name=classes.SEGMENT_SETTINGS_SHEET,index=False)
 
 print("Wrote annotation info to: "+args.annotation_file)
 

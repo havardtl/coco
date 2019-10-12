@@ -13,6 +13,15 @@ VERBOSE = False
 TEMP_FOLDER = "coco_temp"
 CONTOURS_STATS_FOLDER = "contour_stats"
 GRAPHICAL_SEGMENTATION_FOLDER = "segmented_graphical"
+PROJECTIONS_RAW_FOLDER = "projections_raw"
+
+THIS_SCRIPT_FOLDER = os.path.split(os.path.abspath(__file__))[0]
+
+DEFAULT_SETTINGS_XLSX = os.path.join(THIS_SCRIPT_FOLDER,"default_annotations.xlsx")
+TEST_SETTINGS_SHEET = "test_settings"
+SEGMENT_SETTINGS_SHEET = "segment_settings"
+ANNOTATION_SHEET = "annotation"
+PLOT_VARS_SHEET = "plot_vars"
 
 contour_id_counter = 0
 roi3d_id_counter = 0
@@ -146,7 +155,7 @@ class Zstack:
         plate        : str  : Identifier string for plate 
         time         : str  : Identifier string for day 
         well         : str  : Identifier string for well
-        img_number   : str  : Identifier string for image in the well
+        img_numb     : str  : Identifier string for image in the well
         other_info   : str  : Other info about z_stack
         series_index : str  : Index of image series when imaging multiple location in one go 
         time_index   : str  : Index of time index in timed experiments
@@ -170,7 +179,7 @@ class Zstack:
         self.series_index = series_index 
         self.time_index = time_index 
         
-        self.img_id = str(self.experiment)+"_"+str(self.plate)+"_"+str(self.time)+"_"+str(self.well)+"_"+str(self.other_info)
+        self.img_id = str(self.experiment)+"_"+str(self.plate)+"_"+str(self.time)+"_"+str(self.well)+"_"+str(self.img_numb)+"_"+str(self.other_info)
         self.id_z_stack = self.img_id+"_S"+str(self.series_index)+"_T"+str(self.time_index)
         
         self.mask_save_folder = os.path.join(TEMP_FOLDER,"masks",self.id_z_stack)
@@ -206,7 +215,7 @@ class Zstack:
             print("Making combined channels for all images in z_stack "+str(self))
 
         for i in self.images:
-            i.make_combined_channel(self.img_id,self.combined_mask_folder)
+            i.make_combined_channel(self.id_z_stack,self.combined_mask_folder)
     
         self.made_combined_masks = True 
 
@@ -343,13 +352,15 @@ class Zstack:
             print("Writing info about contours to: "+contours_stats_path)
         df.to_csv(contours_stats_path)
     
-    def make_projections(self,max_projection = True,auto_max=True):
+    def make_projections(self,max_projection = True,auto_max=True,colorize = True,add_scale_bar = True):
         '''
         Make projections from z_planes by finding the minimal or maximal value in the z-axis
         Params 
         z_planes        : list : a list of paths to each plane in a stack of z_planes
         max_projection  : bool : Use maximal projection, false gives minimal projection
         auto_max        : bool : Auto level image after making projection
+        colorize        : bool : Add color to image from segment_settings
+        add_scale_bar   : bool : Add scale bar to image
         
         Updates
         self.projections : list of np.array : List of the projections of the z_planes as an 8-bit image. Ordered by channel_index.
@@ -357,36 +368,89 @@ class Zstack:
         '''
         if VERBOSE:
             print("Making projections for z_stack: "+self.id_z_stack)
-
-        projections = [None]*len(self.images[0].channels)
-        for i in self.images: 
-            for j in i.channels: 
-                if projections[j.channel_index] is None: 
-                    projections[j.channel_index] = j.get_image()
-                else: 
-                    if max_projection: 
-                        projections[j.channel_index] = np.maximum(projections[j.channel_index],j.get_image())
-                    else:
-                        projections[j.channel_index] = np.maximum(projections[j.channel_index],j.get_image())
         
-        if auto_max: 
-            for i in range(len(projections)):
-                max_pixel = projections[i].max()
-                projections[i] = (projections[i]/max_pixel/255).astype('uint8') 
-       
-        self.projections = projections
-
-        composite = None 
-        for i in range(len(projections)):
-            if composite is None: 
-                composite = projections[i]
+        global PROJECTIONS_RAW_FOLDER
+        
+        projections = []
+        
+        for i in self.images: 
+            for j in i.channels:
+                make_new_channel = True
+                for p in range(len(projections)): 
+                    if projections[p].channel_index == j.channel_index: 
+                        make_new_channel = False 
+                        if max_projection: 
+                            projections[p].image = np.maximum(projections[p].get_image(),j.get_image())
+                        else:
+                            projections[p].image = np.minimum(projections[p].get_image(),j.get_image())
+                
+                if make_new_channel: 
+                    new_channel_path = os.path.join(PROJECTIONS_RAW_FOLDER,self.id_z_stack+"_C"+str(j.channel_index)+".png")
+                    new_channel = Channel(new_channel_path,j.channel_index,None,j.color)
+                    new_channel.image = j.get_image().copy()
+                    projections.append(new_channel)
+        
+        max_channel_index = 0
+        for p in projections: 
+            cv2.imwrite(p.full_path,p.get_image())
+        
+            p.x_res = self.x_res
+            if p.channel_index > max_channel_index: 
+                max_channel_index = p.channel_index
+        
+        composite_img = None
+        for p in projections: 
+            p_modified = p.make_img_for_viewing(PROJECTIONS_RAW_FOLDER,scale_bar=add_scale_bar,auto_max=auto_max,colorize=colorize)
+            if composite_img is None: 
+                composite_img = p_modified
             else: 
-                cv2.add(composite,projections[i])
+                composite_img = cv2.add(composite_img,p_modified) 
+        
+        self.projections = projections
+        
+        new_channel_path = os.path.join(PROJECTIONS_RAW_FOLDER,self.id_z_stack+"_Ccomp"+".png")
+        composite = Channel(new_channel_path,max_channel_index + 1,None,None)
+        composite.image = composite_img
+                
+        composite.make_img_for_viewing(PROJECTIONS_RAW_FOLDER,scale_bar=False,auto_max=False,colorize=False)
+        
         self.composite = composite
+        
+    def get_projections_data(self): 
+        '''
+        Get information about projections such as their path and other info
+
+        Returns
+        df : pd.DataFrame : Info in DataFrame 
+        '''
+        full_paths = []
+        file_id = []
+        channel_index = []
+        for p in self.projections+[self.composite]: 
+            full_paths.append(p.full_path)
+            file_id.append(p.file_id)
+            channel_index.append(p.channel_index)
+
+        df = pd.DataFrame({"full_path":full_paths,"file_name":file_id,"channel_index":channel_index})
+        
+        df["file_id"] = self.img_id
+        df["id_z_stack"] = self.id_z_stack 
+        #df["experiment"] = self.experiment
+        #df["plate"] = self.plate
+        #df["time"] = self.time
+        #df["well"] = self.well
+        #df["img_numb"] = self.img_numb
+        #df["other_info"] = self.other_info
+        df["series_index"] = self.series_index
+        df["time_index"] = self.time_index
+
+        df["img_dim"] = str(self.img_dim) 
+        
+        return df
     
     def to_pdf(self,add_scale_bar = True,auto_max=True,colorize=True):
         '''
-        Convert z_stack into a pdf that displays information about it
+        Convert z_stack into a pdf that displays information about how each channel was segmented
 
         Params
         add_scale_bar : bool : Add a scale bar to image before plotting PDF
@@ -654,12 +718,16 @@ class Channel:
         scale_bar              : bool : Add scale bar to image 
         auto_max               : bool : Make the highest intensity pixel the highest in image
         colorize               : bool : Convert grayscale image to color as specified in channel color
+        
+        Returns
+        img                    : np.array : cv2 image after processing.
         '''
-        if not scale_bar and not auto_max and not colorize: 
-            self.img_for_viewing_path = self.full_path 
-            return None
-
-        img = self.get_image().copy()
+        img = self.get_image()
+        self.img_for_viewing_path = os.path.join(img_for_viewing_folder,self.file_id+".png")
+        
+        if not auto_max and not scale_bar and not colorize: 
+            cv2.imwrite(self.img_for_viewing_path,img)
+            return img
         
         if auto_max:
             max_pixel = np.max(np.amax(img,axis=0))+1
@@ -673,10 +741,9 @@ class Channel:
                 raise RuntimeError("Channel.x_res must be set outside class initiation to increase performance. Try Channel.get_physical_res()")
             img = self.add_scale_bar_to_img(img,self.x_res)
         
-        self.img_for_viewing_path = os.path.join(img_for_viewing_folder,self.file_id+".png")
         cv2.imwrite(self.img_for_viewing_path,img)
         
-        return None
+        return img
     
     def make_img_with_contours(self,img_w_contour_folder,colorize):
         '''
@@ -714,7 +781,7 @@ class Channel:
         gray_img : numpy.array  : grayscale cv2 image with values 0 -> 255
         bgr      : int tupple : bgr color (b,g,r) where 0 <= b,g,r <= 255
         Returns
-        color    : np.array    : RGB image
+        color    : np.array    : BGR image
         '''
         color = np.zeros((gray_img.shape[0],gray_img.shape[1],3),np.uint8)
         color[:] = bgr
@@ -1210,6 +1277,9 @@ class Roi_3d:
             "n_contours"   : len(self.contours),
             "contour_ids"  : None,
             "contours_centers_xyz" : None,
+            "mean_x_pos" : None,
+            "mean_y_pos" : None,
+            "mean_z_index" : None, 
             "at_edge"      : None
         }
 
@@ -1234,6 +1304,10 @@ class Roi_3d:
                 else: 
                     data["is_inside_roi"] = data["is_inside_roi"] +"," +str(inside_roi)
         
+        sum_x_pos = 0
+        sum_y_pos = 0
+        sum_z_pos = 0
+
         for c in self.contours:
             data["volume"] = data["volume"] + (c.data["area"]*to_um)
             
@@ -1247,7 +1321,11 @@ class Roi_3d:
                 data["contours_centers_xyz"] = center 
             else:
                 data["contours_centers_xyz"] = data["contours_centers_xyz"]+","+center
-            
+           
+            sum_x_pos += int(c.data["centroid_x"])
+            sum_y_pos += int(c.data["centroid_y"])
+            sum_y_pos += int(c.data["z_index"])
+
             if data["at_edge"] is None:
                     data["at_edge"] = c.data["at_edge"] 
             elif c.data["at_edge"] is not None:
@@ -1258,6 +1336,11 @@ class Roi_3d:
                 data["is_inside"] = str(c.data["is_inside"])
             else:
                 data["is_inside"] = data["is_inside"] +","+str(c.data["is_inside"])
+        
+        if data["n_contours"]>0:
+            data["mean_x_pos"]   = sum_x_pos/data["n_contours"]
+            data["mean_y_pos"]   = sum_y_pos/data["n_contours"]
+            data["mean_z_index"] = sum_z_pos/data["n_contours"]
 
         self.data = data
 

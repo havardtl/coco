@@ -102,7 +102,6 @@ def img_paths_to_zstack_classes(img_paths,file_ending,segment_settings):
         
     return z_stacks
 
-
 def img_paths_to_channel_classes(img_paths,file_ending): 
     '''
     Convert a list of images extracted with bfconvert into a list of Channel objects. 
@@ -136,7 +135,6 @@ def img_paths_to_channel_classes(img_paths,file_ending):
             channels.append(channel)
         
     return channels
-
 
 def choose_z_slices(all_z_slices,to_choose):
     '''
@@ -197,7 +195,7 @@ def load_test_settings(settings_file_path):
                 out.append(c)
         return out 
     
-    df = pd.read_excel(settings_file_path)
+    df = pd.read_excel(settings_file_path,sheet = classes.TEST_SETTINGS_SHEET)
     
     contrast     = excel_column_to_list(df["contrast"])
     auto_max     = excel_column_to_list(df["auto_max"])
@@ -266,10 +264,119 @@ def make_channel_masks(channels,setting,mask_save_folder,setting_id):
     
     return save_paths
 
+def delete_folder_with_content(folder):
+    '''
+    Delete folder and all its content. 
+    
+    Params
+    folder : str : path to folder to delete
+    '''
+    exit_code = os.system('rm -rf '+folder)
+    if exit_code != 0: 
+        raise ValueError("Could not delete folder: "+folder)
 
+def excel_to_segment_settings(excel_path): 
+    '''
+    Convert Excel file to list of Segment_settings objects
+    
+    Params 
+    excel_path : str : Path to excel file to read
+    
+    Returns
+    segment_settings : list of Segment_settings : List of Segment_settings
+    '''
+    df_segment_settings = pd.read_excel(excel_path,sheet_name = classes.SEGMENT_SETTINGS_SHEET)
 
+    segment_settings = []
+    for channel in df_segment_settings["channel_index"]: 
+        s = df_segment_settings.loc[df_segment_settings["channel_index"]==channel,]
+        if len(s["channel_index"])!=1:
+            raise ValueError("Need at least one unique channel index in segment settings.")
+        s = s.iloc[0,]
+        segment_settings_c = classes.Segment_settings(channel,s["color"],s["contrast"],s["auto_max"],s["thresh_type"],s["thresh_upper"],s["thresh_lower"],s["open_kernel"],s["close_kernel"],s["combine"])
+        segment_settings.append(segment_settings_c)
+        
+    return segment_settings
 
+def plot_images_pdf(save_folder,df,file_vars,x_vars,y_vars,image_vars,image_dim,sort_ascending=None):
+    '''
+    Create PDFs with images grouped after variables
+    
+    Params
+    df              : pd.Dataframe : Data frame with file paths to images (df["file_path"]) and their variables to sort them by. rows = images, cols = variables
+    file_vars       : list of str  : Column names of varibles used to make different PDF files
+    x_vars          : list of str  : Column names of variables to plot on x-axis
+    y_vars          : list of str  : Column names of variables to plot on y-axis
+    image_vars      : list of str  : Column names of variables to print on top of image
+    image_dim       : tuple of int : image dimensions
+    sort_ascending  : list of bool : Directions to sort each column in, file_vars then y_vars then x_vars. Must be equal in length to 1+len(x_vars)+len(y_vars) (file_vars is compressed to 1 column). True = ascending sort, False = descending sort.  
+    '''
+    
+    os.makedirs(save_folder,exist_ok=True)
 
+    df["file_vars"] = ""
+    sep=""
+    for i in file_vars: 
+        temp = df[i].astype(str).str.replace("_","")
+        df["file_vars"] = df["file_vars"] + sep + temp
+        sep="_"
+    
+    df["x_vars"] = ""
+    for i in x_vars: 
+        temp = df[i].astype(str).str.replace("_","")
+        df["x_vars"] = df["x_vars"] +"_"+ temp
+    
+    df["y_vars"] = ""
+    for i in y_vars: 
+        temp = df[i].astype(str).str.replace("_","")
+        df["y_vars"] = df["y_vars"] + "_" + temp
+
+    
+    if sort_ascending is None: 
+        sort_ascending = [True]*len(["file_vars"]+y_vars+x_vars)
+    df.sort_values(by = ["file_vars"]+y_vars+x_vars,ascending=sort_ascending,inplace=True)
+
+    for f in df["file_vars"].unique():
+        df_f = df[df["file_vars"]==f].copy()
+        xy_positions = pd.DataFrame(index = df_f["y_vars"].unique(),columns = df_f["x_vars"].unique())
+        for x_pos in range(0,len(xy_positions.columns)):
+            for y_pos in range(0,len(xy_positions.index)):
+                xy_positions.iloc[y_pos,x_pos] = (x_pos,y_pos)
+        
+        df_f["pdf_x_position"] = None 
+        df_f["pdf_y_position"] = None 
+        for i in df_f.index:
+            xy = xy_positions.loc[df_f.loc[i,"y_vars"],df_f.loc[i,"x_vars"]]
+            df_f.loc[i,"pdf_x_position"] = xy[0] 
+            df_f.loc[i,"pdf_y_position"] = xy[1]
+        
+        save_path = os.path.join(save_folder,f+".pdf")
+        make_pdf(save_path,df_f,x_vars,y_vars,image_vars,image_dim)
+
+def make_pdf(save_path,df,x_vars,y_vars,image_vars,image_dim): 
+    '''
+    Input df with images and make a pdf out of them
+    
+    Params
+    save_path    : str          : Path to save pdf in
+    df           : pd.DataFrame : Data frame with paths to images and columns to sort images by
+    x_vars       : list of str  : Column names of variables to plot on x-axis
+    y_vars       : list of str  : Column names of variables to plot on y-axis
+    image_vars   : list of str  : Column names of variables to print on top of image 
+    image_dim    : tuple of int : image format in pixels [width,height]. If not all images have this aspect ratio, some might end up overlapping. 
+    '''
+    
+    pdf_imgs = []
+
+    for i in df.index: 
+        full_path = df.loc[i,"full_path"]
+        x = df.loc[i,"pdf_x_position"]
+        y = df.loc[i,"pdf_y_position"]
+        data = df.loc[i,image_vars+x_vars+y_vars].to_dict()
+        pdf_imgs.append(classes.Image_in_pdf(x,y,full_path,data,x_vars,y_vars,image_vars))
+
+    pdf = classes.Pdf(save_path,pdf_imgs,image_dim)
+    pdf.make_pdf()
 
 
 
