@@ -107,7 +107,7 @@ def main(raw_img_path,info,segment_settings):
                 images_paths = f.read().splitlines()
         else:
             print(print_str+"Extracting images and building 3D ROIs")
-            images_paths = oi.get_images(raw_img_path,extracted_images_folder,images_paths_file,bfconvert_info_str,file_ending)
+            images_paths = oi.get_images(raw_img_path,extracted_images_folder,images_paths_file,bfconvert_info_str,file_ending,args.verbose)
         
         if not os.path.isfile(pickle_path): 
             z_stacks = oi.img_paths_to_zstack_classes(images_paths,file_ending,segment_settings)

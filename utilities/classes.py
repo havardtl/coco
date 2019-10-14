@@ -1390,18 +1390,33 @@ class Pdf:
         self.images_in_pdf = images_in_pdf
         self.image_dim = image_dim
         
-    def shorten_info(self,info,box_length):
+        self.check_overlapping_imgs()
+        
+    def check_overlapping_imgs(self): 
+        all_xy = []
+        for i in self.images_in_pdf: 
+            all_xy.append("x"+str(i.x)+"y"+str(i.y))
+        
+        set_xy = set(all_xy)
+         
+        difference = len(all_xy) - len(set_xy)
+        
+        if difference > 0: 
+            raise ValueError("The images_in_pdf list has overlapping values. all: {a}, set {s}, difference: {d}".format(a = len(all_xy),s = len(set_xy),d=difference))
+        
+    def shorten_info(self,info,box_length,char_marg=3):
         '''
         If info is larger than a certain length, shorten it
 
         Params
         info       : str   : Information to shorten
         box_length : float : Length of box to fit info into
+        char_marg  : int   : Character margin to subtract from length
         '''
         short_info = info 
         
         avg_character_width = 3.5
-        max_characters = int(box_length/avg_character_width) 
+        max_characters = int(box_length/avg_character_width) - char_marg
 
         if len(short_info)>max_characters:
             short_info = short_info.split(" = ")[1]

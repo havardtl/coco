@@ -73,18 +73,16 @@ img_id = os.path.splitext(os.path.split(raw_img_path)[1])[0]
 extracted_images_folder = os.path.join(args.temp_folder,"extracted_raw",img_id)
 
 images_paths_file = "files_info.txt"
-bfconvert_info_str = "_INFO_%s_%t_%z_%c"
-file_ending = ".ome.tiff"
 if os.path.isfile(os.path.join(extracted_images_folder,images_paths_file)): 
     print("Images already extracted from raw files, using those.")
     with open(os.path.join(extracted_images_folder,images_paths_file),'r') as f: 
         images_paths = f.read().splitlines()
 else:
     print("Extracting images...")
-    images_paths = oi.get_images(raw_img_path,extracted_images_folder,images_paths_file,bfconvert_info_str,file_ending)
+    images_paths = oi.get_images_bfconvert(raw_img_path,extracted_images_folder,images_paths_file,args.verbose)
 
 if args.verbose: print("Converting image paths to channels.",end = " ")
-channels = oi.img_paths_to_channel_classes(images_paths,file_ending)
+channels = oi.img_paths_to_channel_classes(images_paths)
 
 if args.verbose: print("Making test settings from file: "+str(args.annotation_file))
 test_settings = oi.make_test_settings(args.annotation_file)

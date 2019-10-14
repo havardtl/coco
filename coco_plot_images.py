@@ -13,6 +13,7 @@ parser.add_argument('--temp_folder',type=str,default='coco_temp',help="temp fold
 parser.add_argument('--channel_colors',type=str,default = "(0,255,0),(255,0,255),(255,0,0),(0,0,255)",help='Colors to use for plotting channels. colors in BGR format. default: (0,255,0),(255,0,255),(255,0,0),(0,0,255)')
 parser.add_argument('--cores',type=int,help='Number of cores to use. Default is number of cores minus 1.')
 parser.add_argument('--n_process',type=int,help='Process the n first alphabetically sorted files')
+parser.add_argument('--stitch',action="store_true",default=False,help='Stitch together images in xy-plane with ImageJs Grid-Collection stitching plugin. Requires ImageJ to be runnable as "ImageJ-linux64".')
 parser.add_argument('--verbose',action='store_true',default=False,help='Verbose mode')
 parser.add_argument('--debug',action='store_true',default=False,help='Run in verbose mode and with one core for debugging')
 parser.add_argument('--overwrite',action = 'store_true',default=False,help='Overwrite all files rather than re-using exisiting files. NB! does this by deleting --temp_folder, --projections_raw_folder, --projections_pdf_folder and all their content')
@@ -88,20 +89,21 @@ def main(raw_img_path,info,segment_settings):
     print_str = info+"\traw_img_path: "+raw_img_path+"\t"
    
     images_paths_file = "files_info.txt"
-    bfconvert_info_str = "_INFO_%s_%t_%z_%c"
-    file_ending = ".ome.tiff"
 
     if os.path.isfile(os.path.join(extracted_images_folder,images_paths_file)): 
         print(print_str+"Images already extracted from raw files, using those to make projections.")
         with open(os.path.join(extracted_images_folder,images_paths_file),'r') as f: 
             images_paths = f.read().splitlines()
-    else:
-        print(print_str+"Extracting images")
-        images_paths = oi.get_images(raw_img_path,extracted_images_folder,images_paths_file,bfconvert_info_str,file_ending)
-        
+    elif not args.stitch:
+        print(print_str+"Extracting images with bfconvert")
+        images_paths = oi.get_images_bfconvert(raw_img_path,extracted_images_folder,images_paths_file,verbose = args.verbose)
+    else: 
+        print(print_str+"Extracting images with ImageJ and stitching in xy-plane")
+        images_paths = oi.get_images_imagej(raw_img_path,extracted_images_folder,images_paths_file,verbose = args.verbose)
+
     if args.verbose: print("Getting info about z_stacks: ")
     df = pd.DataFrame()
-    z_stacks = oi.img_paths_to_zstack_classes(images_paths,file_ending,segment_settings)
+    z_stacks = oi.img_paths_to_zstack_classes(images_paths,segment_settings)
     for z in z_stacks:
         if args.verbose: 
             z.print_all()
@@ -146,19 +148,29 @@ else:
     
     with open(pickle_path,"wb") as f: 
         pickle.dump(df,f)
+    print("Wrote info about extracted images to pickle: "+pickle_path)
+
+def img_dim_str_to_tuple(img_dim_str): 
+    img_dim_str = img_dim_str.replace("(","").replace(")","")
+    img_dim = img_dim_str.split(", ",1)
+    img_dim = (int(img_dim[0]),int(img_dim[1]))
+    return img_dim
 
 most_common_img_dim = str(df["img_dim"].mode()[0])
-img_dim_goal = most_common_img_dim.replace("(","").replace(")","").split(",",1)
-image_dim_goal = (int(img_dim_goal[0]),int(img_dim_goal[1]))
-goal_ratio = float(img_dim_goal[1])/float(img_dim_goal[0])
+image_dim_goal = img_dim_str_to_tuple(most_common_img_dim)
+image_dim_goal = (int(image_dim_goal[0]),int(image_dim_goal[1]))
+goal_ratio = float(image_dim_goal[1])/float(image_dim_goal[0])
+
+#TODO: image ratio is wrong
 
 cropped_projection_folder = os.path.join(args.temp_folder,"cropped_projections")
 os.makedirs(cropped_projection_folder,exist_ok=True)
 
 for i in df.index:
     img_dim = df.loc[i,"img_dim"]
+    
     if img_dim != most_common_img_dim:
-        img_dim = img_dim.split("x")
+        img_dim = img_dim_str_to_tuple(img_dim)
         img_dim_ratio = float(img_dim[1])/float(img_dim[0])
         
         if img_dim_ratio > goal_ratio:
@@ -169,7 +181,7 @@ for i in df.index:
             new_height = int((goal_ratio/img_dim_ratio)*float(img_dim[1]))
 
         new_projection = cv2.imread(df.loc[i,"full_path"])
-        new_projection = oi.imcrop2(new_projection,[0,0,new_width,new_height],value=(150,150,150))
+        new_projection = oi.imcrop(new_projection,[0,0,new_width,new_height],value=(150,150,150))
         cropped_projection_path = os.path.join(cropped_projection_folder,os.path.split(df.loc[i,"full_path"])[1])
         cv2.imwrite(cropped_projection_path,new_projection)
         df.loc[i,"full_path"] = cropped_projection_path
@@ -177,7 +189,7 @@ for i in df.index:
 print("Adding annotation info from: "+args.annotation_file)
 annotation = pd.read_excel(args.annotation_file,sheet_name = classes.ANNOTATION_SHEET)
 print(annotation)
-annotation.drop("file_path",axis="columns",inplace=True)
+annotation.drop("full_path",axis="columns",inplace=True)
 df = df.merge(annotation,on="file_id",how="left")
 
 plot_vars = pd.read_excel(args.annotation_file,sheet_name = classes.PLOT_VARS_SHEET)

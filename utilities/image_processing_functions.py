@@ -1,45 +1,51 @@
 import os
 import math
 import itertools
+import subprocess
 
 import pandas as pd
 import cv2
 
-import utilities.classes as classes
+import utilities.classes as classes 
 
-def get_images(file_path,extract_to_folder,info_file="files_info.txt",bfconvert_info_str = "_INFO_%s_%t_%z_%c",file_ending = ".ome.tiff"):
+IMG_FILE_ENDING = ".ome.tiff"
+
+import_imagej = False
+
+def get_images_bfconvert(file_path,extract_to_folder,info_file="files_info.txt",verbose = False):
     '''
-    Get individual stack images from microscopy format file
+    Use bfconvert tool to get individual stack images from microscopy format file
 
     Params:
     file_path           : str   : path to the file 
     extract_to_folder   : str   : folder to store the extracted files. Log file stored one folder above.
     info_file           : str   : path to csv file with data about files  
-    bfconvert_info_str  : str   : string added to end of filen name of resulting files. See bfconvert for what special symbols are converted to. 
-    file_ending         : str   : file format to save output file in
      
     Returns
     img_paths         : list of str : paths to extracted files. 
     '''
+    global IMG_FILE_ENDING
+    bfconvert_info_str = "_INFO_%s_%t_%z_%c"
     
     os.makedirs(extract_to_folder,exist_ok=True)
     
     fname = os.path.splitext(os.path.split(file_path)[1])[0]
-    out_name = fname+bfconvert_info_str+file_ending
+    out_name = fname+bfconvert_info_str+IMG_FILE_ENDING 
     out_name = os.path.join(extract_to_folder,out_name)
     log_file = os.path.join(os.path.split(extract_to_folder)[0],"log_"+fname+".txt")
 
     cmd = "bfconvert -overwrite \"{file_path}\" \"{out_name}\" > {log_file}".format(file_path = file_path,out_name = out_name,log_file=log_file)
-
-    #print(cmd)
+    
+    if verbose: 
+        print(cmd)
     exit_val = os.system(cmd)
     if exit_val !=0:
-        raise RuntimeError("This command did not exit properly: "+cmd)
+        raise RuntimeError("This command did not exit properly: \n"+cmd)
     
     img_paths = [] 
     
     for path in os.listdir(extract_to_folder):
-        if path.endswith(file_ending):
+        if path.endswith(IMG_FILE_ENDING):
             img_paths.append(os.path.join(extract_to_folder,path))
     
     with open(os.path.join(extract_to_folder,info_file),'w') as f: 
@@ -48,24 +54,101 @@ def get_images(file_path,extract_to_folder,info_file="files_info.txt",bfconvert_
     
     return img_paths
 
-def img_paths_to_zstack_classes(img_paths,file_ending,segment_settings): 
+def get_images_imagej(file_path,extract_to_folder,info_file="files_info.txt",verbose = False):
+    '''
+    Use imagej to get individual stack images from microscopy format file. This script also stitch together images in x-y plane.
+
+    Params:
+    file_path           : str   : path to the file 
+    extract_to_folder   : str   : folder to store the extracted files. Log file stored one folder above.
+    info_file           : str   : path to csv file with data about files  
+     
+    Returns
+    img_paths         : list of str : paths to extracted files. 
+    '''
+    
+    global IMG_FILE_ENDING
+    info_split_str = "_INFO"
+
+    this_script_folder = os.path.dirname(os.path.abspath(__file__))
+    imagej_macro_path = os.path.join(this_script_folder,"stitch_w_imagej.ijm")
+
+    os.makedirs(extract_to_folder,exist_ok=True)
+    
+    fname = os.path.splitext(os.path.split(file_path)[1])[0]
+    out_name = fname+info_split_str+IMG_FILE_ENDING 
+    out_name = os.path.join(extract_to_folder,out_name)
+    log_file = os.path.join(os.path.split(extract_to_folder)[0],"log_"+fname+".txt")
+   
+    cmd = "ImageJ-linux64 --ij2 --console -macro \"{imagej_macro_path}\" \"{file_path},{out_name}\"".format(imagej_macro_path = imagej_macro_path,file_path = file_path,out_name = out_name,log_file = log_file)
+    
+    if verbose:
+        print(cmd)
+    
+    bash_script = os.path.join(extract_to_folder,"temp.sh")
+    with open(bash_script,"w") as f: 
+        f.write("#!/bin/sh\n")
+        f.write(cmd)
+
+    os.system("chmod u+x "+bash_script)
+
+    exit_val = subprocess.check_call(bash_script,shell=True)
+    
+    print("command exit_val = "+str(exit_val))
+    
+    if exit_val !=0:
+        raise RuntimeError("This command did not exit properly: \n"+cmd)
+    
+    img_paths = []
+    for path in os.listdir(extract_to_folder):
+        if path.endswith(IMG_FILE_ENDING):
+            img_paths.append(os.path.join(extract_to_folder,path))
+
+    df = pd.DataFrame({"old_name":img_paths})
+    df["file_id"],df["info"] = df["old_name"].str.split(info_split_str+"_",1).str 
+    df["info"] = df["info"].str.replace(IMG_FILE_ENDING,"")
+
+    print(df)
+    df["z_index"],df["channel_index"],df["time_index"] = df["info"].str.split("_",2).str
+
+    df["z_index"] = df["z_index"].str.replace("Z","")
+    df["channel_index"] = df["channel_index"].str.replace("C","")
+    df["time_index"] = df["time_index"].str.replace("T","")
+    df["series_index"] = "0"
+    
+    df["new_name"] = df["file_id"]+info_split_str+"_"+df["series_index"]+"_"+df["time_index"]+"_"+df["z_index"]+"_"+df["channel_index"]+IMG_FILE_ENDING 
+    
+    if verbose: 
+        print(df)
+
+    for i in df.index: 
+        os.rename(df.loc[i,"old_name"],df.loc[i,"new_name"])
+
+    with open(os.path.join(extract_to_folder,info_file),'w') as f: 
+        for path in df["new_name"]: 
+            f.write(path+"\n")
+    
+    return df["new_name"]
+
+def img_paths_to_zstack_classes(img_paths,segment_settings): 
     '''
     Convert a list of images extracted with bfconvert into Zstack classes. 
     
     Params
     img_paths        : list of str              : Paths to files extracted with bfconvert. Assumes file names according to following convention: {experiment}_{plate}_{time}_{well}_{img_numb}_{other_info}_INFO_{series_index}_{time_index}_{z_index}_{channel_index}{file_ending}
-    file_ending      : str                      : File ending of file 
     segment_settings : list of Segment_settings : List of segment settings classes. One for each channel index
     
     Returns
     z_stacks    : list of Zstack : Files organized into Zstack classes for further use
     
     '''
+    global IMG_FILE_ENDING
+
     df_images = pd.DataFrame(data = {"full_path":img_paths})
     df_images["root"],df_images["fname"] = df_images["full_path"].str.rsplit("/",1).str
     df_images["fid"],df_images["info"] = df_images["fname"].str.split("_INFO_",1).str
     df_images["experiment"],df_images["plate"],df_images["time"],df_images["well"],df_images["img_numb"],df_images["other_info"] = df_images["fid"].str.split("_",5).str
-    df_images["info"] = df_images["info"].str.replace(file_ending,"")
+    df_images["info"] = df_images["info"].str.replace(IMG_FILE_ENDING,"")
     df_images["series_index"],df_images["time_index"],df_images["z_index"],df_images["channel_index"] = df_images["info"].str.split("_",3).str
 
     df_images["image_id"] = "S"+df_images["series_index"]+"T"+df_images["time_index"]+"Z"+df_images["z_index"]
@@ -102,22 +185,23 @@ def img_paths_to_zstack_classes(img_paths,file_ending,segment_settings):
         
     return z_stacks
 
-def img_paths_to_channel_classes(img_paths,file_ending): 
+def img_paths_to_channel_classes(img_paths): 
     '''
     Convert a list of images extracted with bfconvert into a list of Channel objects. 
     
     Params
     img_paths        : list of str              : Paths to files extracted with bfconvert. Assumes file names according to following convention: {experiment}_{plate}_{time}_{well}_{img_numb}_{other_info}_INFO_{series_index}_{time_index}_{z_index}_{channel_index}{file_ending}
-    file_ending      : str                      : File ending of file 
     
     Returns
     channels    : list of Channel : Files from one z_stack organized into Channel classes 
     '''
+    global IMG_FILE_ENDING 
+    
     df_images = pd.DataFrame(data = {"full_path":img_paths})
     df_images["root"],df_images["fname"] = df_images["full_path"].str.rsplit("/",1).str
     df_images["fid"],df_images["info"] = df_images["fname"].str.split("_INFO_",1).str
     df_images["experiment"],df_images["plate"],df_images["time"],df_images["well"],df_images["img_numb"],df_images["other_info"] = df_images["fid"].str.split("_",5).str
-    df_images["info"] = df_images["info"].str.replace(file_ending,"")
+    df_images["info"] = df_images["info"].str.replace(IMG_FILE_ENDING,"")
     df_images["series_index"],df_images["time_index"],df_images["z_index"],df_images["channel_index"] = df_images["info"].str.split("_",3).str
 
     df_images["image_id"] = "S"+df_images["series_index"]+"T"+df_images["time_index"]+"Z"+df_images["z_index"]
@@ -240,29 +324,6 @@ def make_test_settings(load_settings_path):
         test_settings.append(setting)
 
     return test_settings
-    
-def make_channel_masks(channels,setting,mask_save_folder,setting_id): 
-    '''
-    Make masks for all channels with the specified mask creation settings
-    
-    Params
-    channels   : list of Channel  : Channels that needs mask to be created
-    mask_save_folder : str              : Folder to save masks in. Same length as channels. 
-    setting    : Segment_settings : Segmentation settings for making mask
-    setting_id : str              : setting_id to print when running function
-    '''
-    print(setting_id,end="\t",flush=True)
-
-    save_paths = []
-    for c in channels: 
-        save_paths.append(os.path.join(mask_save_folder,c.file_id+"_setting-"+str(setting_id)+".png"))
-    
-    for i in range(len(channels)): 
-        channels[i].make_mask(setting)
-        mask = channels[i].get_mask()
-        cv2.imwrite(save_paths[i],mask)
-    
-    return save_paths
 
 def delete_folder_with_content(folder):
     '''
@@ -330,7 +391,6 @@ def plot_images_pdf(save_folder,df,file_vars,x_vars,y_vars,image_vars,image_dim,
     for i in y_vars: 
         temp = df[i].astype(str).str.replace("_","")
         df["y_vars"] = df["y_vars"] + "_" + temp
-
     
     if sort_ascending is None: 
         sort_ascending = [True]*len(["file_vars"]+y_vars+x_vars)
@@ -379,7 +439,44 @@ def make_pdf(save_path,df,x_vars,y_vars,image_vars,image_dim):
     pdf.make_pdf()
 
 
+def imcrop(img,bbox,value=150):
+    """
+    Crop image with border equal value if it is outside image
+    
+    Params
+    img     : np.array    : cv2 image
+    bbox    : list of int : [x1,y1,x2,y2]
+    value   :             : color of added border
 
+    Returns
+    img     : np.array    : cv2 image with border 
+    """
+    x1 = int(bbox[0])
+    y1 = int(bbox[1])
+    x2 = int(bbox[2])
+    y2 = int(bbox[3])
+    if x1 < 0 or y1 < 0 or x2 > img.shape[1] or y2 > img.shape[0]:
+        img, x1, x2, y1, y2 = pad_img_to_fit_bbox(img, x1, x2, y1, y2,value=value)
+    return img[y1:y2, x1:x2]
+
+
+def pad_img_to_fit_bbox(img, x1, x2, y1, y2,value=255):
+    """
+    Add border to image and return modified coordinates after border addition
+    
+    Params
+    img             : numpy array   : image
+    x1,x2,y1,y2:    : int           : coordinates
+    Returns
+    img             : numpy array   : image
+    x1,x2,y1,y2:    : int           : coordinates after padding
+    """
+    img = cv2.copyMakeBorder(img, - min(0, y1), max(y2 - img.shape[0], 0), -min(0, x1), max(x2 - img.shape[1], 0),cv2.BORDER_CONSTANT,value=value)
+    y2 += -min(0, y1)
+    y1 += -min(0, y1)
+    x2 += -min(0, x1)
+    x1 += -min(0, x1)
+    return img, x1, x2, y1, y2
 
 
 

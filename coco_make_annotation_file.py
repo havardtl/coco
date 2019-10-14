@@ -21,6 +21,16 @@ import pandas as pd
 
 import utilities.classes as classes
 
+##########################
+# Functions
+##########################
+def strip_lines(string): 
+    #convert string into lines and then strip each line and convert string back to multi-line string again
+    out = ""
+    for l in string.splitlines(): 
+        out = out + l.strip() + "\n"
+    return out
+
 ########################
 # Script 
 ########################
@@ -35,7 +45,7 @@ for i in range(len(file_id)):
 if len(file_id)<1:
     raise ValueError("Did not find any raw files in "+args.raw_data)
 
-df = pd.DataFrame(data = {"file_path":raw_files,"file_id":file_id,"treatment":None,"is_control":False,"stain_group":None})
+df = pd.DataFrame(data = {"full_path":raw_files,"file_id":file_id,"treatment":None,"is_control":False,"stain_group":None})
 
 # Find exp setup file
 path_to_here = os.path.abspath(".")
@@ -62,7 +72,7 @@ if exp_setup_file is not None:
         sample_info = sample_info[(first_line+1):]
     
     #Convert sample_info from tabular or white space format to csv format 
-    sample_info = sample_info.strip()
+    sample_info = strip_lines(sample_info)
     sample_info = sample_info.replace(";",",")
     if sample_info.count(",")<=(sample_info.count("\n")-1):
         while "  " in sample_info: 
@@ -71,7 +81,7 @@ if exp_setup_file is not None:
             sample_info = sample_info.replace("\t\t","\t")
         sample_info = sample_info.replace(" ",",")
         sample_info = sample_info.replace("\t",",")
-
+    
     exp_stringio = StringIO(sample_info)
     
     exp_df = pd.read_csv(exp_stringio,sep=",")
@@ -102,8 +112,10 @@ plot_vars = pd.DataFrame(data = {"variable":always_present,"plot_axis":plot_axis
 in_annotation = pd.DataFrame(data = {"variable":list(df.columns),"plot_axis":None,"importance":0,"sort_ascending":True})
 plot_vars = pd.concat([plot_vars,in_annotation])
 
-plot_vars.loc[plot_vars["variable"]=="file_id","plot_axis"] = "image" 
-plot_vars.loc[plot_vars["variable"]=="file_id","importance"] = 0 
+plot_vars.loc[plot_vars["variable"]=="full_path","plot_axis"] = "image" 
+plot_vars.loc[plot_vars["variable"]=="full_path","importance"] = 1
+plot_vars.loc[plot_vars["variable"]=="file_id","plot_axis"] = "y" 
+plot_vars.loc[plot_vars["variable"]=="file_id","importance"] = 3 
 plot_vars.loc[plot_vars["variable"]=="treatment","plot_axis"] = "y" 
 plot_vars.loc[plot_vars["variable"]=="treatment","importance"] = 3 
 plot_vars.loc[plot_vars["variable"]=="is_control","plot_axis"] = "y" 
