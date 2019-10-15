@@ -279,7 +279,7 @@ def load_test_settings(settings_file_path):
                 out.append(c)
         return out 
     
-    df = pd.read_excel(settings_file_path,sheet = classes.TEST_SETTINGS_SHEET)
+    df = pd.read_excel(settings_file_path,sheet_name = classes.TEST_SETTINGS_SHEET)
     
     contrast     = excel_column_to_list(df["contrast"])
     auto_max     = excel_column_to_list(df["auto_max"])
@@ -478,6 +478,50 @@ def pad_img_to_fit_bbox(img, x1, x2, y1, y2,value=255):
     x1 += -min(0, x1)
     return img, x1, x2, y1, y2
 
+def img_dim_str_to_tuple(img_dim_str): 
+        #image dimensions stored as string version of tupple in dataframe, convert it to tupple int here
+        img_dim_str = img_dim_str.replace("(","").replace(")","")
+        img_dim = img_dim_str.split(", ",1)
+        img_dim = (int(img_dim[0]),int(img_dim[1]))
+        return img_dim
 
 
+def all_images_in_same_ratio(df,cropped_images_folder):
+    '''
+    Crop all images so that they have the same ratio. Uses the most common ratio as base. 
+    
+    Params
+    df                    : pd.DataFrame : Data frame with images to plot. Needs to contain "full_path" column with paths to images and "img_dim" with image dimensions as string representations of int-tupples: str((int,int)). 
+    cropped_images_folder : str : Path to folder with cropped images
+    
+    Returns
+    df                    : pd.DataFrame : Data frame where "full_path" column has gotten updated paths to cropped images
+    '''
+    
+    most_common_img_dim = str(df["img_dim"].mode()[0])
+    image_dim_goal = img_dim_str_to_tuple(most_common_img_dim)
+    image_dim_goal = (int(image_dim_goal[0]),int(image_dim_goal[1]))
+    goal_ratio = float(image_dim_goal[1])/float(image_dim_goal[0])
+
+    for i in df.index:
+        img_dim = df.loc[i,"img_dim"]
+        if img_dim != most_common_img_dim:
+            img_dim = img_dim_str_to_tuple(img_dim)
+            img_dim_ratio = float(img_dim[1])/float(img_dim[0])
+            
+            if img_dim_ratio < goal_ratio:
+                new_width = int((img_dim_ratio/goal_ratio)*float(img_dim[0]))
+                new_height = int(img_dim[0])
+            else:
+                new_height  = int(img_dim[0])
+                new_width = int(new_height * 1/goal_ratio)
+                new_ratio = new_height/new_width
+
+            new_projection = cv2.imread(df.loc[i,"full_path"])
+            new_projection = imcrop(new_projection,[0,0,new_height,new_width],value=(150,150,150))
+            cropped_projection_path = os.path.join(cropped_images_folder,os.path.split(df.loc[i,"full_path"])[1])
+            cv2.imwrite(cropped_projection_path,new_projection)
+            df.loc[i,"full_path"] = cropped_projection_path
+    
+    return df
 

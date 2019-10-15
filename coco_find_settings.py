@@ -37,17 +37,20 @@ if not os.path.exists(args.annotation_file):
         raise RunTimeError("Command did not finish properly. cmd: "+cmd)
 
 pdf_save_folder = os.path.join(args.out_folder,"segmented_pdfs")
-img_for_viewing_folder = os.path.join(args.temp_folder,"find_settings_for_viewing")
+viewing_automax_false = os.path.join(args.temp_folder,"find_settings_automax_false")
+viewing_automax_true  = os.path.join(args.temp_folder,"find_settings_automax_true")
 mask_save_folder = os.path.join(args.temp_folder,"test_settings_masks")
+
+oi.delete_folder_with_content(viewing_automax_false)
+oi.delete_folder_with_content(viewing_automax_true)
+oi.delete_folder_with_content(mask_save_folder)
 
 os.makedirs(args.out_folder,exist_ok=True)
 os.makedirs(args.temp_folder,exist_ok=True)
 os.makedirs(pdf_save_folder,exist_ok=True)
 os.makedirs(mask_save_folder,exist_ok=True)
-os.makedirs(img_for_viewing_folder,exist_ok=True)
-
-oi.delete_folder_with_content(img_for_viewing_folder)
-oi.delete_folder_with_content(mask_save_folder)
+os.makedirs(viewing_automax_false,exist_ok=True)
+os.makedirs(viewing_automax_true,exist_ok=True)
 
 if args.debug: 
     args.verbose = True
@@ -103,10 +106,12 @@ for i in df.index:
     df.loc[i,"channel_index"] = df.loc[i,"channel"].channel_index
     if df.loc[i,"z_index"] in choosen_z:
         df.loc[i,"z_toshow"] = True
+df["channel_index"] = df["channel_index"].astype(int)
 
 print("Out of {tot_z} z_slices we are displaying {n}".format(tot_z = len(df.index),n = sum(df["z_toshow"])))
 
 df = df.loc[df["z_toshow"],]
+print(df)
 
 for i in df.index: 
     df.loc[i,"img_dim"] = str(df.loc[i,"channel"].get_image().shape)
@@ -135,18 +140,19 @@ for i in df["channel_index"].unique():
 
     for j in this_channel.index:
         c = this_channel.loc[j,"channel"]
-        data["file_id"]  = c.full_path 
+        c.make_img_for_viewing(viewing_automax_false,scale_bar=False,auto_max=False,colorize=False)
+    
+        data["file_id"]  = c.img_for_viewing_path 
         data["z_index"]  = this_channel.loc[j,"z_index"]
         data["auto_max"] = False
-        pdf_imgs.append(classes.Image_in_pdf(x,y,c.full_path,data.copy(),x_vars,y_vars,image_vars))
+        pdf_imgs.append(classes.Image_in_pdf(x,y,c.img_for_viewing_path,data.copy(),x_vars,y_vars,image_vars))
         x = x + 1 
     y = y +1
     x = 0
 
     for j in this_channel.index:
         c = this_channel.loc[j,"channel"]
-
-        c.make_img_for_viewing(img_for_viewing_folder,scale_bar=False,auto_max=True,colorize=False)
+        c.make_img_for_viewing(viewing_automax_true,scale_bar=False,auto_max=True,colorize=False)
         
         data["file_id"]  = c.img_for_viewing_path 
         data["z_index"]  = this_channel.loc[j,"z_index"]

@@ -4,7 +4,6 @@ import numpy as np
 import pandas as pd
 import cv2
 
-MASKS_IN_MEMORY = True #Store channel masks in memory instead of in written files
 IMGS_IN_MEMORY = True #Store channel images in memory instead of in written files
 MIN_CONTOUR_AREA = 5
 
@@ -204,37 +203,42 @@ class Zstack:
         
     def make_masks(self):
         #Generate masks in all Images objects
-        if VERBOSE: 
-            print("Making masks for all images in z_stack "+str(self))
+        if VERBOSE: print("Making masks for all images in z_stack "+str(self))
+        
         for i in self.images:
+            if VERBOSE: print(i.z_index,end="  ",flush=True)
             i.make_masks(self.mask_save_folder)
-    
+            
+        if VERBOSE: print("")
+        
     def make_combined_masks(self):
         #Combine all masks into one to make a super object that other contours can be checked if they are inside
-        if VERBOSE: 
-            print("Making combined channels for all images in z_stack "+str(self))
+        if VERBOSE: print("Making combined channels for all images in z_stack "+str(self))
 
         for i in self.images:
+            if VERBOSE: print(i.z_index,end="  ",flush=True)
             i.make_combined_channel(self.id_z_stack,self.combined_mask_folder)
-    
+        
+        if VERBOSE: print("")
         self.made_combined_masks = True 
 
     def find_contours(self): 
         #Find contours in all Images objects
-        if VERBOSE: 
-            print("Finding contours all images in z_stack "+str(self))
+        if VERBOSE: print("Finding contours all images in z_stack "+str(self))
         for i in self.images:
+            if VERBOSE: print(i.z_index,end="  ",flush=True)
             for j in i.channels: 
                 j.find_contours()
             
             if self.made_combined_masks:
                 i.combined_mask.find_contours()
+        if VERBOSE: print("")
 
     def find_z_overlapping(self): 
         #Find all overlapping contours for all contours in images
-        if VERBOSE: 
-            print("Finding z_overlapping for all images in z_stack "+str(self))
+        if VERBOSE: print("Finding z_overlapping for all images in z_stack "+str(self))
         for i in range(len(self.images)-1):
+            if VERBOSE: print(i,end="  ",flush=True)
             self.images[i].find_z_overlapping(self.images[i+1])
         
         last_image = self.images[len(self.images)-1]
@@ -244,18 +248,22 @@ class Zstack:
         for i in last_channels: 
             for j in i.contours: 
                 j.z_overlapping = []
+                
+        if VERBOSE: print("")
             
     def update_contour_stats(self):
-        if VERBOSE: 
-            print("Updating contour stats for all contours in z_stack "+str(self))
+        if VERBOSE: print("Updating contour stats for all contours in z_stack "+str(self))
         for i in self.images:
+            if VERBOSE: print(i.z_index,end="  ",flush=True)
             all_channels = i.channels
             if self.made_combined_masks: 
                 all_channels = all_channels + [i.combined_mask]
             for j in all_channels:
                 for k in j.contours: 
                     k.update_contour_stats()
-
+                    
+        if VERBOSE: print("")
+        
     def get_rois_3d(self):
         '''
         Get rois 3d from all contour objects in all images
@@ -263,8 +271,7 @@ class Zstack:
         Returns 
         rois_3d : list of Roi_3d : All Roi_3d objects 
         '''
-        if VERBOSE: 
-            print("Generating roi_3ds for all images in z_stack "+str(self))
+        if VERBOSE: print("Generating roi_3ds for all images in z_stack "+str(self))
 
         for i in self.images: 
             for k in i.combined_mask.contours: 
@@ -304,8 +311,10 @@ class Zstack:
         if VERBOSE: 
             print("Finding if all contours are inside combined mask for all images in z_stack "+str(self))
         for i in self.images:
+            if VERBOSE: print(i.z_index,end="  ",flush=True)
             i.is_inside_combined() 
-   
+        if VERBOSE: print("")
+        
     def measure_channels(self):
         #Measure contours for all channels
         for i in self.images:
@@ -315,9 +324,8 @@ class Zstack:
                 all_channels = i.channels + [i.combined_mask]
             
             for j in all_channels: 
-                for other_channel in i.channels:
-                    for k in j.contours:
-                        k.measure_channel(other_channel)
+                for k in j.contours:
+                    k.measure_channel(i.channels)
 
     def write_contour_info(self):
         #Write out all information about contours
@@ -366,8 +374,7 @@ class Zstack:
         self.projections : list of np.array : List of the projections of the z_planes as an 8-bit image. Ordered by channel_index.
         self.composite   : np.array         : Composite image of the projections
         '''
-        if VERBOSE:
-            print("Making projections for z_stack: "+self.id_z_stack)
+        if VERBOSE: print("Making projections for z_stack: "+self.id_z_stack)
         
         global PROJECTIONS_RAW_FOLDER
         
@@ -634,15 +641,7 @@ class Image:
     def get_physical_res(self,xml_folder):
         #Get physical resoluion of image in um per pixel 
         return self.channels[0].get_physical_res(xml_folder)
-       
-    def measure_channels(self):
-        #Measure the mean grey and sum positive pixels for each contour in channels for all channels
-        for i in self.channels: 
-            for j in self.channels:
-                for k in i.contours:
-                    k.measure_channel(j)
-        return None
-    
+         
     def is_inside_combined(self):
         #For all contours in Channels, check if they are inside combined mask
         for i in self.channels: 
@@ -701,7 +700,7 @@ class Channel:
         if self.image is not None: 
             return self.image 
         else: 
-            image = cv2.imread(self.full_path,cv2.IMREAD_ANYDEPTH)
+            image = cv2.imread(self.full_path,cv2.IMREAD_GRAYSCALE)
             
             global IMGS_IN_MEMORY 
             if IMGS_IN_MEMORY: 
@@ -802,25 +801,29 @@ class Channel:
         '''
         image = image.copy()
         shape = image.shape 
-        img_width = shape[0]
-        img_height = shape[1]
+        img_width = shape[1]
+        img_height = shape[0]
 
         scale_in_pixels = int(img_width * 0.2)
         scale_in_um = scale_in_pixels * x_res
         
         unit = "um"
-        
         scale_in_um_str = ("{:.0f} {unit}").format(scale_in_um,unit=unit)
-
+        
+        scale_height = int(scale_in_pixels * 0.05)
         margin = img_width*0.05
-        scale_box = [int(img_width - (scale_in_pixels+margin)),int(img_height*0.9),int(img_width-(margin)),int(img_height*0.89)] #[x1,y1,x2,y2] with x0,y0 in left bottom corner
+        x1 = int(img_width - (scale_in_pixels+margin))
+        y1 = int(img_height*0.9)
+        scale_box = [x1,y1,x1+scale_in_pixels,y1+scale_height] #[x1,y1,x2,y2] with x0,y0 in left bottom corner
 
         cv2.rectangle(image,(scale_box[0],scale_box[1]),(scale_box[2],scale_box[3]),(255,255,255),thickness = -1)
 
         text_x = scale_box[0] + int(img_width*0.02)
         text_y = scale_box[1] - int(img_height*0.02)
-
-        cv2.putText(image,scale_in_um_str,(text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX,0.5,(255,255,255),2)
+        
+        font_size = img_width/1000  
+        
+        cv2.putText(image,scale_in_um_str,(text_x,text_y),cv2.FONT_HERSHEY_SIMPLEX,font_size,(255,255,255),2)
 
         return image
    
@@ -884,8 +887,8 @@ class Channel:
         if mask_save_folder is None: 
             mask_in_memory = True
         else: 
-            global MASKS_IN_MEMORY
-            mask_in_memory = MASKS_IN_MEMORY
+            global IMGS_IN_MEMORY
+            mask_in_memory = IMGS_IN_MEMORY
         
         if mask_in_memory: 
             self.mask = img
@@ -1041,33 +1044,75 @@ class Contour:
         self.z_overlapping = None 
         self.overlapps = False #True if this Contour is stored in another Contours z_overlapping value
         
-        self.is_inside = None 
-        only_contour = np.zeros(self.img_dim,dtype="uint8")
-        cv2.drawContours(only_contour,[self.points],-1,color=255,thickness = -1)
-        self.only_contour = only_contour 
-
+        self.is_inside = None
+        
+        self.contour_box = self.get_contour_rectangle()
+        
         self.roi_3d_id = None #Id of this chain of rois that make up a single Roi_3d
 
         self.data = None#self.contour_stats() 
+    
+    def get_contour_rectangle(self):
+        '''
+        Calculate the bounding box around the contour and return the coordinates as a rectangle object
         
+        Returns
+        rectangle : Rectangle : Rectangle object that contains the contour  
+        '''
+        x,y,w,h = cv2.boundingRect(self.points)
+        
+        box = [x,y,x+w,y+h]
+        
+        return Rectangle(box)
+    
+    def get_only_contour(self):
+        '''
+        Draw a black image with only contour.
+
+        Returns 
+        only_contour : np.array : cv2 image with only this contour
+        '''
+        only_contour = np.zeros(self.img_dim,dtype="uint8")
+        cv2.drawContours(only_contour,[self.points],-1,color=255,thickness = -1)
+        return only_contour
+    
     def is_at_edge(self):
         '''
         Check if this contour is overlapping with the edge of the image
         '''
-        at_edge = (np.sum(self.only_contour[0,:])> 0) or (np.sum(self.only_contour[:,0]) > 0)or (np.sum(self.only_contour[:,self.img_dim[0]-1])>0) or (np.sum(self.only_contour[self.img_dim[1]-1,:])>0)
-        return at_edge 
+        only_contour = self.get_only_contour()
+        
+        bw = 1
+        img_dim = only_contour.shape[:2]
+        mask = np.ones(img_dim, dtype = "uint8")
+        cv2.rectangle(mask, (bw,bw),(img_dim[1]-bw,img_dim[0]-bw), 0, -1)
+        only_edge = cv2.bitwise_and(only_contour, only_contour, mask = mask)
+        
+        if np.sum(only_edge) > 0 : 
+            return True
+        else: 
+            return False
     
-    def measure_channel(self,channel):
-        mean_grey =  cv2.bitwise_and(channel.get_image(),channel.get_image(),mask=self.only_contour)
-        mean_grey = np.sum(mean_grey)
-        sum_pos_pixels =  cv2.bitwise_and(channel.get_mask(),channel.get_mask(),mask=self.only_contour)
-        sum_pos_pixels = np.sum(sum_pos_pixels/255)
+    def measure_channel(self,channels):
+        '''
+        Measure this contours sum grey and sum positive pixels for all channels
+
+        Params
+        channels : list of Channel : channels to measure
+        '''
+        only_contour = self.get_only_contour()
         
-        data = {
-            "sum_grey_C"+str(channel.channel_index):[mean_grey],
-            "sum_positive_C"+str(channel.channel_index):[sum_pos_pixels]}
-        
-        self.data.update(data)
+        for channel in channels:
+            mean_grey =  cv2.bitwise_and(channel.get_image(),channel.get_image(),mask=only_contour)
+            mean_grey = np.sum(mean_grey)
+            sum_pos_pixels =  cv2.bitwise_and(channel.get_mask(),channel.get_mask(),mask=only_contour)
+            sum_pos_pixels = np.sum(sum_pos_pixels/255)
+            
+            data = {
+                "sum_grey_C"+str(channel.channel_index):[mean_grey],
+                "sum_positive_C"+str(channel.channel_index):[sum_pos_pixels]}
+            
+            self.data.update(data)
 
         return None   
 
@@ -1095,7 +1140,7 @@ class Contour:
         
         self.data = data 
         return None        
-
+            
     def is_inside_other_contour(self,other_contour):
         '''
         Check if contour is inside other contour
@@ -1103,12 +1148,17 @@ class Contour:
         Params
         other_contour : Contour : Contour to check if it is inside 
         '''
-        overlap_img = cv2.bitwise_and(other_contour.only_contour,other_contour.only_contour,mask = self.only_contour)
         if self.is_inside is None: 
             self.is_inside = []
-        if overlap_img.sum()>0:
-            self.is_inside.append(other_contour)
-        return None
+        
+        overlaps = self.contour_box.overlaps(other_contour.contour_box)
+        
+        if overlaps: 
+            only_this_contour = self.get_only_contour()
+            only_other_contour = other_contour.get_only_contour()
+            overlap_img = cv2.bitwise_and(only_other_contour,only_other_contour,mask = only_this_contour)
+            if overlap_img.sum()>0:
+                self.is_inside.append(other_contour)
 
     def find_z_overlapping(self,next_z): 
         '''
@@ -1118,24 +1168,20 @@ class Contour:
         next_z : Channel : The next z-plane of the same channels 
 
         '''
-        empty_img = np.zeros(self.img_dim,dtype="uint8")
-        this_contour = empty_img.copy()
-        cv2.drawContours(this_contour,[self.points],-1,color=255,thickness = -1)
         if self.z_overlapping is not None: 
             raise ValueError("Contour.z_overlapping is already set. Did you run Contour.find_z_overlapping() twice ?")
         
+        only_this_contour = self.get_only_contour()
         self.z_overlapping = []
-
         for next_z_c in next_z.contours: 
-            next_contour = empty_img.copy()
-            cv2.drawContours(next_contour,[next_z_c.points],-1,color=255,thickness=-1)
-
-            overlap_img = cv2.bitwise_and(next_contour,next_contour,mask = this_contour)
-            if overlap_img.sum() > 5:
+            overlaps = self.contour_box.overlaps(next_z_c.contour_box)
+            
+            if overlaps: 
+                only_other_contour = other_contour.get_only_contour()
+                overlap_img = cv2.bitwise_and(only_other_contour,only_other_contour,mask = only_this_contour)
+                if overlap_img.sum()>5:
                     self.z_overlapping.append(next_z_c)
                     next_z_c.overlapps = True
-
-        return None
     
     def add_roi_id(self):
         all_z_overlapping = []
@@ -1348,6 +1394,26 @@ class Roi_3d:
         string = "{class_str} id: {class_id} built from n contours: {n}".format(class_str = self.__class__.__name__,class_id = self.id_roi_3d,n = len(self.contours))
         return string
 
+class Rectangle:
+    def __init__(self,points):
+        '''
+        Rectangle object
+        '''
+        self.bottom_left  = [points[0],points[1]]
+        self.top_right    = [points[2],points[3]]
+    
+    def overlaps(self,other):
+        '''
+        Check if this rectangle overlaps with another 
+        
+        Params
+        other    : Rectangle : Other rectangle to check
+        
+        Returns 
+        overlaps : bool      : True if rectangles overlap
+        '''
+        return not (self.top_right[0] < other.bottom_left[0] or self.bottom_left[0] > other.top_right[0] or self.top_right[1] < other.bottom_left[1] or self.bottom_left[1] > other.top_right[1])
+    
 class Image_in_pdf:
     
     def __init__(self,x,y,img_path,data,x_vars,y_vars,image_vars):
@@ -1383,7 +1449,7 @@ class Pdf:
         Params
         save_path     : str                  : Path to save pdf in
         images_in_pdf : list of Image_in_pdf : List of objects with information about image path, location in pdf and x and y variables to plot
-        image_dim     : tuple of int         : image format in pixels [width,height]. Adds grey border to images not in this aspect ratio 
+        image_dim     : tuple of int         : image format in pixels [height,width]. Adds grey border to images not in this aspect ratio 
         '''
         
         self.save_path = save_path
@@ -1485,7 +1551,7 @@ class Pdf:
         area_meta_yvars = (0,(len(self.images_in_pdf[0].y_vars))*annotate_box_height)
         area_meta_xvars = (0,(len(self.images_in_pdf[0].x_vars))*annotate_box_height)
         marg = 2
-        goal_aspect_ratio = self.image_dim[1]/self.image_dim[0]
+        goal_aspect_ratio = self.image_dim[0]/self.image_dim[1]
 
         img_width = (c_width-area_meta_yvars[1])/(x_max+1)
         img_height = img_width * goal_aspect_ratio

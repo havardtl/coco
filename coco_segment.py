@@ -16,6 +16,7 @@ parser.add_argument('--n_process',type=int,help='Process the n first alphabetica
 parser.add_argument('--debug',action='store_true',default=False,help='Run in verbose mode and with one core for debugging')
 parser.add_argument('--verbose',action='store_true',default=False,help='Verbose mode')
 parser.add_argument('--overwrite',action = 'store_true',default=False,help='Overwrite all files rather than re-using exisiting files. NB! does this by deleting --temp_folder, --out_rois, --out_graphical, --out_contours and all their content')
+parser.add_argument('--imgs_in_files',action='store_true',default=False,help='Save images in files instead of in memory, slower but takes less memory')
 args = parser.parse_args()
 
 ########################
@@ -68,6 +69,7 @@ classes.VERBOSE = args.verbose
 classes.CONTOURS_STATS_FOLDER = args.out_contours 
 classes.TEMP_FOLDER = args.temp_folder 
 classes.GRAPHICAL_SEGMENTATION_FOLDER = args.out_graphical
+classes.IMGS_IN_MEMORY = not args.imgs_in_files
 
 print("Found {n_files} to process".format(n_files = len(image_ids_all)))
 segment_settings = oi.excel_to_segment_settings(args.annotation_file)
@@ -98,19 +100,19 @@ def main(raw_img_path,info,segment_settings):
         print(print_str+"3D ROIs already made, skipping this file")
     else:
         images_paths_file = "files_info.txt"
-        bfconvert_info_str = "_INFO_%s_%t_%z_%c"
-        file_ending = ".ome.tiff"
-
         if os.path.isfile(os.path.join(extracted_images_folder,images_paths_file)): 
             print(print_str+"Images already extracted from raw files, using those to build 3D ROIs.")
             with open(os.path.join(extracted_images_folder,images_paths_file),'r') as f: 
                 images_paths = f.read().splitlines()
-        else:
+        elif not args.stitch:
             print(print_str+"Extracting images and building 3D ROIs")
-            images_paths = oi.get_images(raw_img_path,extracted_images_folder,images_paths_file,bfconvert_info_str,file_ending,args.verbose)
+            images_paths = oi.get_images_bfconvert(raw_img_path,extracted_images_folder,images_paths_file,verbose = args.verbose)
+        else: 
+            print(print_str+"Extracting images with ImageJ and stitching in xy-plane")
+            images_paths = oi.get_images_imagej(raw_img_path,extracted_images_folder,images_paths_file,verbose = args.verbose)
         
         if not os.path.isfile(pickle_path): 
-            z_stacks = oi.img_paths_to_zstack_classes(images_paths,file_ending,segment_settings)
+            z_stacks = oi.img_paths_to_zstack_classes(images_paths,segment_settings)
             for z in z_stacks:
                 if args.verbose: 
                     z.print_all()

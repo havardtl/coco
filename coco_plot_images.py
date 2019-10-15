@@ -13,7 +13,7 @@ parser.add_argument('--temp_folder',type=str,default='coco_temp',help="temp fold
 parser.add_argument('--channel_colors',type=str,default = "(0,255,0),(255,0,255),(255,0,0),(0,0,255)",help='Colors to use for plotting channels. colors in BGR format. default: (0,255,0),(255,0,255),(255,0,0),(0,0,255)')
 parser.add_argument('--cores',type=int,help='Number of cores to use. Default is number of cores minus 1.')
 parser.add_argument('--n_process',type=int,help='Process the n first alphabetically sorted files')
-parser.add_argument('--stitch',action="store_true",default=False,help='Stitch together images in xy-plane with ImageJs Grid-Collection stitching plugin. Requires ImageJ to be runnable as "ImageJ-linux64".')
+parser.add_argument('--stitch',action="store_true",default=False,help='Stitch together images in xy-plane with ImageJs Grid-Collection stitching plugin. Requires ImageJ to be runnable as "ImageJ-linux64" and is highly experimental')
 parser.add_argument('--verbose',action='store_true',default=False,help='Verbose mode')
 parser.add_argument('--debug',action='store_true',default=False,help='Run in verbose mode and with one core for debugging')
 parser.add_argument('--overwrite',action = 'store_true',default=False,help='Overwrite all files rather than re-using exisiting files. NB! does this by deleting --temp_folder, --projections_raw_folder, --projections_pdf_folder and all their content')
@@ -44,10 +44,14 @@ if not os.path.exists(args.annotation_file):
 if args.overwrite: 
     for folder in [args.temp_folder,args.projections_raw_folder,args.projections_pdf_folder]:
         oi.delete_folder_with_content(folder)
-    
+
 if args.debug: 
     args.cores = 1
     args.verbose = True
+    
+if args.stitch: 
+    print("Warning! Cannot guarantee behaviour of ImageJ. Use at own risk! Also setting number of cores to 1.")
+    args.cores = 1
 
 classes.VERBOSE = args.verbose
 classes.TEMP_FOLDER = args.temp_folder 
@@ -145,46 +149,22 @@ else:
     df = pd.DataFrame()
     for i in image_info: 
         df = pd.concat([df,i],ignore_index=True)
-    
+        
+    print("Convert all images to the same ratio")
+    cropped_projection_folder = os.path.join(args.temp_folder,"cropped_projections")
+    os.makedirs(cropped_projection_folder,exist_ok=True)
+    df = oi.all_images_in_same_ratio(df,cropped_projection_folder)
+
     with open(pickle_path,"wb") as f: 
         pickle.dump(df,f)
     print("Wrote info about extracted images to pickle: "+pickle_path)
 
-def img_dim_str_to_tuple(img_dim_str): 
-    img_dim_str = img_dim_str.replace("(","").replace(")","")
-    img_dim = img_dim_str.split(", ",1)
-    img_dim = (int(img_dim[0]),int(img_dim[1]))
-    return img_dim
+print(type(df))
+print(df["img_dim"].mode())
 
 most_common_img_dim = str(df["img_dim"].mode()[0])
-image_dim_goal = img_dim_str_to_tuple(most_common_img_dim)
+image_dim_goal = oi.img_dim_str_to_tuple(most_common_img_dim)
 image_dim_goal = (int(image_dim_goal[0]),int(image_dim_goal[1]))
-goal_ratio = float(image_dim_goal[1])/float(image_dim_goal[0])
-
-#TODO: image ratio is wrong
-
-cropped_projection_folder = os.path.join(args.temp_folder,"cropped_projections")
-os.makedirs(cropped_projection_folder,exist_ok=True)
-
-for i in df.index:
-    img_dim = df.loc[i,"img_dim"]
-    
-    if img_dim != most_common_img_dim:
-        img_dim = img_dim_str_to_tuple(img_dim)
-        img_dim_ratio = float(img_dim[1])/float(img_dim[0])
-        
-        if img_dim_ratio > goal_ratio:
-            new_width = int((img_dim_ratio/goal_ratio)*float(img_dim[0]))
-            new_height = int(img_dim[1])
-        else: 
-            new_width = int(img_dim[0])
-            new_height = int((goal_ratio/img_dim_ratio)*float(img_dim[1]))
-
-        new_projection = cv2.imread(df.loc[i,"full_path"])
-        new_projection = oi.imcrop(new_projection,[0,0,new_width,new_height],value=(150,150,150))
-        cropped_projection_path = os.path.join(cropped_projection_folder,os.path.split(df.loc[i,"full_path"])[1])
-        cv2.imwrite(cropped_projection_path,new_projection)
-        df.loc[i,"full_path"] = cropped_projection_path
 
 print("Adding annotation info from: "+args.annotation_file)
 annotation = pd.read_excel(args.annotation_file,sheet_name = classes.ANNOTATION_SHEET)
