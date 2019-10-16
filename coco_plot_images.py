@@ -5,11 +5,12 @@
 #######################
 import argparse
 parser = argparse.ArgumentParser(description = 'Extract channels from confocal images, make them into projections and plot in pdf.')
-parser.add_argument('--raw_data',default="rawdata",type=str,help='Path to raw image. Can use all formats accepted by your installed version of bftools. ')
+parser.add_argument('--raw_data',default="raw/rawdata",type=str,help='Path to raw image. Can use all formats accepted by your installed version of bftools. ')
+parser.add_argument('--extracted_images_folder',type=str,default='raw/extracted_raw',help="Folder with extracted images.")
 parser.add_argument('--annotation_file',type=str,default='annotation1.xlsx',help="Excel file with annotation data for files. Make it with coco_make_annotation_file.py.")
-parser.add_argument('--projections_pdf_folder',type=str,default = 'projections_pdf', help='Output folder for pdfs with maximal projections')
-parser.add_argument('--projections_raw_folder',type=str,default = 'projections_raw', help='Output folder for raw maximal projections')
-parser.add_argument('--temp_folder',type=str,default='coco_temp',help="temp folder for storing temporary images. Must not exist before startup. default: ./coco_temp")
+parser.add_argument('--projections_pdf_folder',type=str,default = 'graphical/projections_pdf', help='Output folder for pdfs with maximal projections')
+parser.add_argument('--projections_raw_folder',type=str,default = 'graphical/projections_raw', help='Output folder for raw maximal projections')
+parser.add_argument('--temp_folder',type=str,default='raw/temp',help="temp folder for storing temporary images. Must not exist before startup. default: ./coco_temp")
 parser.add_argument('--channel_colors',type=str,default = "(0,255,0),(255,0,255),(255,0,0),(0,0,255)",help='Colors to use for plotting channels. colors in BGR format. default: (0,255,0),(255,0,255),(255,0,0),(0,0,255)')
 parser.add_argument('--cores',type=int,help='Number of cores to use. Default is number of cores minus 1.')
 parser.add_argument('--n_process',type=int,help='Process the n first alphabetically sorted files')
@@ -60,6 +61,7 @@ classes.PROJECTIONS_RAW_FOLDER = args.projections_raw_folder
 os.makedirs(args.projections_pdf_folder,exist_ok = True)
 os.makedirs(args.projections_raw_folder,exist_ok=True)
 os.makedirs(args.temp_folder,exist_ok = True)
+os.makedirs(args.extracted_images_folder,exist_ok=True)
 
 pickle_path = os.path.join(args.temp_folder,"coco_plot_images_df.pickle")
 
@@ -88,22 +90,22 @@ def main(raw_img_path,info,segment_settings):
 
     img_id = os.path.splitext(os.path.split(raw_img_path)[1])[0]
 
-    extracted_images_folder = os.path.join(args.temp_folder,"extracted_raw",img_id)
+    extracted_images_folder_this_img = os.path.join(args.extracted_images_folder,img_id)
     
     print_str = info+"\traw_img_path: "+raw_img_path+"\t"
    
     images_paths_file = "files_info.txt"
 
-    if os.path.isfile(os.path.join(extracted_images_folder,images_paths_file)): 
+    if os.path.isfile(os.path.join(extracted_images_folder_this_img,images_paths_file)): 
         print(print_str+"Images already extracted from raw files, using those to make projections.")
-        with open(os.path.join(extracted_images_folder,images_paths_file),'r') as f: 
+        with open(os.path.join(extracted_images_folder_this_img,images_paths_file),'r') as f: 
             images_paths = f.read().splitlines()
     elif not args.stitch:
         print(print_str+"Extracting images with bfconvert")
-        images_paths = oi.get_images_bfconvert(raw_img_path,extracted_images_folder,images_paths_file,verbose = args.verbose)
+        images_paths = oi.get_images_bfconvert(raw_img_path,extracted_images_folder_this_img,images_paths_file,verbose = args.verbose)
     else: 
         print(print_str+"Extracting images with ImageJ and stitching in xy-plane")
-        images_paths = oi.get_images_imagej(raw_img_path,extracted_images_folder,images_paths_file,verbose = args.verbose)
+        images_paths = oi.get_images_imagej(raw_img_path,extracted_images_folder_this_img,images_paths_file,verbose = args.verbose)
 
     if args.verbose: print("Getting info about z_stacks: ")
     df = pd.DataFrame()

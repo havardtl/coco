@@ -5,11 +5,12 @@
 #######################
 import argparse
 parser = argparse.ArgumentParser(description = 'Process one of the confocal images with a multitude of segmentation settings to find the best settings. ')
-parser.add_argument('--raw_data',default="rawdata",type=str,help='Path to raw image or folder with raw images. If a folder is submitted the alfabetically first is choosen. Can use all formats accepted by your installed version of bftools. ')
-parser.add_argument('--out_folder',type=str,default = 'find_segment_settings', help='Output folder for segmentation test results')
+parser.add_argument('--raw_data',default="raw/rawdata",type=str,help='Path to raw image or folder with raw images. If a folder is submitted the alfabetically first is choosen. Can use all formats accepted by your installed version of bftools. ')
+parser.add_argument('--extracted_images_folder',type=str,default='raw/extracted_raw',help="Folder with extracted images.")
+parser.add_argument('--out_folder',type=str,default = 'graphical/find_segment_settings', help='Output folder for segmentation test results')
 parser.add_argument('--annotation_file',type=str,default='annotation1.xlsx',help="Excel file with test settings to try all combinations of. Make it with coco_make_annotation_file.py.")
 parser.add_argument('--z_toshow',type = str,default="i5",help='z-slices to include. "1:3" = [1,2,3],"1,5,8" = [1,5,8] and "i3" = 3 evenly choosen from range. Default = "i3"')
-parser.add_argument('--temp_folder',type=str,default='coco_temp',help="temp folder for storing temporary images. default: ./coco_temp")
+parser.add_argument('--temp_folder',type=str,default='raw/temp',help="temp folder for storing temporary images. default: ./coco_temp")
 parser.add_argument('--debug',action='store_true',default=False,help='Run in verbose mode')
 parser.add_argument('--verbose',action='store_true',default=False,help='Verbose mode')
 args = parser.parse_args()
@@ -47,6 +48,7 @@ oi.delete_folder_with_content(mask_save_folder)
 
 os.makedirs(args.out_folder,exist_ok=True)
 os.makedirs(args.temp_folder,exist_ok=True)
+os.makedirs(args.extracted_images_folder,exist_ok=True)
 os.makedirs(pdf_save_folder,exist_ok=True)
 os.makedirs(mask_save_folder,exist_ok=True)
 os.makedirs(viewing_automax_false,exist_ok=True)
@@ -73,16 +75,16 @@ print("Processing image: "+raw_img_path)
 
 img_id = os.path.splitext(os.path.split(raw_img_path)[1])[0]
 
-extracted_images_folder = os.path.join(args.temp_folder,"extracted_raw",img_id)
+extracted_images_folder_this_img = os.path.join(args.extracted_images_folder,img_id)
 
 images_paths_file = "files_info.txt"
-if os.path.isfile(os.path.join(extracted_images_folder,images_paths_file)): 
+if os.path.isfile(os.path.join(extracted_images_folder_this_img,images_paths_file)): 
     print("Images already extracted from raw files, using those.")
-    with open(os.path.join(extracted_images_folder,images_paths_file),'r') as f: 
+    with open(os.path.join(extracted_images_folder_this_img,images_paths_file),'r') as f: 
         images_paths = f.read().splitlines()
 else:
     print("Extracting images...")
-    images_paths = oi.get_images_bfconvert(raw_img_path,extracted_images_folder,images_paths_file,args.verbose)
+    images_paths = oi.get_images_bfconvert(raw_img_path,extracted_images_folder_this_img,images_paths_file,args.verbose)
 
 if args.verbose: print("Converting image paths to channels.",end = " ")
 channels = oi.img_paths_to_channel_classes(images_paths)

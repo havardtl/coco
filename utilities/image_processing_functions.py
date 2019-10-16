@@ -438,7 +438,6 @@ def make_pdf(save_path,df,x_vars,y_vars,image_vars,image_dim):
     pdf = classes.Pdf(save_path,pdf_imgs,image_dim)
     pdf.make_pdf()
 
-
 def imcrop(img,bbox,value=150):
     """
     Crop image with border equal value if it is outside image
@@ -458,7 +457,6 @@ def imcrop(img,bbox,value=150):
     if x1 < 0 or y1 < 0 or x2 > img.shape[1] or y2 > img.shape[0]:
         img, x1, x2, y1, y2 = pad_img_to_fit_bbox(img, x1, x2, y1, y2,value=value)
     return img[y1:y2, x1:x2]
-
 
 def pad_img_to_fit_bbox(img, x1, x2, y1, y2,value=255):
     """

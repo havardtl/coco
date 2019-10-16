@@ -5,7 +5,7 @@
 #######################
 import argparse
 parser = argparse.ArgumentParser(description = 'Make annotation file for entering data about images.')
-parser.add_argument('--raw_data',default="rawdata",type=str,help='Path to raw image. File names must follow this convention: "experiment_plate_day_well_object_otherinfo.*" Can use all formats accepted by your installed version of bftools. ')
+parser.add_argument('--raw_data',default="raw/rawdata",type=str,help='Path to raw image. File names must follow this convention: "experiment_plate_day_well_object_otherinfo.*" Can use all formats accepted by your installed version of bftools. ')
 parser.add_argument('--annotation_input',default="exp_setup.txt",type=str,help='Looks for annotation file that contains this string in file name in all above folders. Excludes all info above "--Sample ID--" if that string is present. Adds annotation from it automatically by looking for "well_id" from this table in raw file name.')
 parser.add_argument('--well_id_remove',default = r'_d[0-9][0-9]',type=str,help='Remove this regular expression from file name before trying to match "well_id"')
 parser.add_argument('--annotation_file',type=str,default = 'annotation1.xlsx', help='Output file containing annotation data')

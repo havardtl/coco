@@ -5,18 +5,18 @@
 #######################
 import argparse
 parser = argparse.ArgumentParser(description = 'Segment objects in confocal images and extracts their information.')
-parser.add_argument('--raw_data',default="rawdata",type=str,help='Folder with all raw data. Does not look for files in sub-folders. Can use all formats accepted by your installed version of bftools. ')
+parser.add_argument('--raw_data',default="raw/rawdata",type=str,help='Folder with all raw data. Does not look for files in sub-folders. Can use all formats accepted by your installed version of bftools.')
 parser.add_argument('--annotation_file',type=str,default='annotation1.xlsx',help="Excel file with segmentation settings for channels. Make it with coco_make_annotation_file.py.")
-parser.add_argument('--out_contours',type=str,default = 'contours_stats', help='Output folder for stats about contours')
-parser.add_argument('--out_rois',type=str,default = 'rois_stats', help='Output folder for stats about 3d rois')
-parser.add_argument('--out_graphical',type=str,default = 'graphic_segmentation', help='Output folder for graphical representation of segmentation')
-parser.add_argument('--temp_folder',type=str,default='coco_temp',help="temp folder for storing temporary images. Must not exist before startup. default: ./ORGcount_temp")
+parser.add_argument('--out_contours',type=str,default = 'stats/contours_stats', help='Output folder for stats about contours')
+parser.add_argument('--out_rois',type=str,default = 'stats/rois_stats', help='Output folder for stats about 3d rois')
+parser.add_argument('--out_graphical',type=str,default = 'graphical/graphic_segmentation', help='Output folder for graphical representation of segmentation')
+parser.add_argument('--temp_folder',type=str,default='raw/temp',help="temp folder for storing temporary files.")
+parser.add_argument('--extracted_images_folder',type=str,default='raw/extracted_raw',help="Folder with extracted images.")
 parser.add_argument('--cores',type=int,help='Number of cores to use. Default is number of cores minus 1.')
 parser.add_argument('--n_process',type=int,help='Process the n first alphabetically sorted files')
 parser.add_argument('--debug',action='store_true',default=False,help='Run in verbose mode and with one core for debugging')
 parser.add_argument('--verbose',action='store_true',default=False,help='Verbose mode')
-parser.add_argument('--overwrite',action = 'store_true',default=False,help='Overwrite all files rather than re-using exisiting files. NB! does this by deleting --temp_folder, --out_rois, --out_graphical, --out_contours and all their content')
-parser.add_argument('--imgs_in_files',action='store_true',default=False,help='Save images in files instead of in memory, slower but takes less memory')
+parser.add_argument('--overwrite',action = 'store_true',default=False,help='Overwrite all files rather than re-using exisiting files. Does not re-extract images. NB! does this by deleting --temp_folder, --out_rois, --out_graphical, --out_contours and all their content')
 args = parser.parse_args()
 
 ########################
@@ -43,7 +43,7 @@ if not os.path.exists(args.annotation_file):
     if exit_code != 0: 
         raise RunTimeError("Command did not finish properly. cmd: "+cmd)
 
-if args.overwrite: 
+if args.overwrite:
     for folder in [args.temp_folder,args.out_rois,args.out_graphical,args.out_contours]:
         oi.delete_folder_with_content(folder)
 
@@ -51,6 +51,7 @@ os.makedirs(args.out_graphical,exist_ok=True)
 os.makedirs(args.out_contours,exist_ok=True)
 os.makedirs(args.out_rois,exist_ok=True)
 os.makedirs(args.temp_folder,exist_ok = True)
+os.makedirs(args.extracted_images_folder,exist_ok = True)
 
 image_ids_all = os.listdir(args.raw_data)
 for i in range(len(image_ids_all)): 
@@ -69,7 +70,6 @@ classes.VERBOSE = args.verbose
 classes.CONTOURS_STATS_FOLDER = args.out_contours 
 classes.TEMP_FOLDER = args.temp_folder 
 classes.GRAPHICAL_SEGMENTATION_FOLDER = args.out_graphical
-classes.IMGS_IN_MEMORY = not args.imgs_in_files
 
 print("Found {n_files} to process".format(n_files = len(image_ids_all)))
 segment_settings = oi.excel_to_segment_settings(args.annotation_file)
@@ -87,7 +87,7 @@ def main(raw_img_path,info,segment_settings):
 
     img_id = os.path.splitext(os.path.split(raw_img_path)[1])[0]
 
-    extracted_images_folder = os.path.join(args.temp_folder,"extracted_raw",img_id)
+    extracted_images_folder_this_img = os.path.join(args.extracted_images_folder,img_id)
     df_rois_path = os.path.join(args.out_rois,img_id+".csv")
     
     pickle_folder = os.path.join(args.temp_folder,"pickles")
@@ -100,16 +100,16 @@ def main(raw_img_path,info,segment_settings):
         print(print_str+"3D ROIs already made, skipping this file")
     else:
         images_paths_file = "files_info.txt"
-        if os.path.isfile(os.path.join(extracted_images_folder,images_paths_file)): 
+        if os.path.isfile(os.path.join(extracted_images_folder_this_img,images_paths_file)): 
             print(print_str+"Images already extracted from raw files, using those to build 3D ROIs.")
-            with open(os.path.join(extracted_images_folder,images_paths_file),'r') as f: 
+            with open(os.path.join(extracted_images_folder_this_img,images_paths_file),'r') as f: 
                 images_paths = f.read().splitlines()
         elif not args.stitch:
             print(print_str+"Extracting images and building 3D ROIs")
-            images_paths = oi.get_images_bfconvert(raw_img_path,extracted_images_folder,images_paths_file,verbose = args.verbose)
+            images_paths = oi.get_images_bfconvert(raw_img_path,extracted_images_folder_this_img,images_paths_file,verbose = args.verbose)
         else: 
             print(print_str+"Extracting images with ImageJ and stitching in xy-plane")
-            images_paths = oi.get_images_imagej(raw_img_path,extracted_images_folder,images_paths_file,verbose = args.verbose)
+            images_paths = oi.get_images_imagej(raw_img_path,extracted_images_folder_this_img,images_paths_file,verbose = args.verbose)
         
         if not os.path.isfile(pickle_path): 
             z_stacks = oi.img_paths_to_zstack_classes(images_paths,segment_settings)
