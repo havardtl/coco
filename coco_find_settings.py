@@ -90,7 +90,8 @@ if args.verbose: print("Converting image paths to channels.",end = " ")
 channels = oi.img_paths_to_channel_classes(images_paths)
 
 if args.verbose: print("Making test settings from file: "+str(args.annotation_file))
-test_settings = oi.make_test_settings(args.annotation_file)
+order = ["contrast","auto_max","open_kernel","close_kernel","thresh_type","thresh_upper","thresh_lower"]
+test_settings = oi.make_test_settings(args.annotation_file,order)
 print("Made {n} test settings".format(n=len(test_settings)))
 
 df = pd.DataFrame({"channel":channels,"z_toshow":False,"z_index":None})
@@ -135,6 +136,7 @@ for i in df["channel_index"].unique():
     y = 0
     x_vars = ["z_index"]
     y_vars = ["contrast","auto_max","thresh_type","thresh_upper","thresh_lower","open_kernel","close_kernel"]
+    
     image_vars = ["file_id"]
     data = {}
     for field in x_vars+y_vars+image_vars:
@@ -173,11 +175,6 @@ for i in df["channel_index"].unique():
             mask_path = os.path.join(mask_save_folder,c.file_id+"_"+str(setting_counter)+".png")
             setting_counter = setting_counter + 1
             cv2.imwrite(mask_path,mask)
-            '''
-            print(data)
-            print(s.get_dict())
-            print("\n\n")
-            '''
             data["file_id"]  = mask_path
             data["z_index"]  = this_channel.loc[j,"z_index"]
             data.update(s.get_dict())

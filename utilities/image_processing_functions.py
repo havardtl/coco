@@ -291,10 +291,11 @@ def load_test_settings(settings_file_path):
     
     return contrast,auto_max,thresh_type,thresh_upper,thresh_lower,open_kernel,close_kernel  
 
-def make_test_settings(load_settings_path):
+def make_test_settings(load_settings_path,order = None):
     '''
     Params
-    load_settings_path  : str : Path to file specifying ranges of settings to test. 
+    load_settings_path  : str         : Path to file specifying ranges of settings to test. 
+    order               : list of str : If you provide this value, the order of output variables is sorted according to these.  
     
     Returns
     test_settings : list of Segment_settings : List of all the possible setting combinations as Segment_settings objects
@@ -318,6 +319,9 @@ def make_test_settings(load_settings_path):
     
     df_s.drop_duplicates(inplace = True)
 
+    if order is not None: 
+        df_s.sort_values(by=order,inplace=True)
+
     test_settings = []
     for i in df_s.index: 
         setting = classes.Segment_settings(channel_index,color,df_s.loc[i,"contrast"],df_s.loc[i,"auto_max"],df_s.loc[i,"thresh_type"],df_s.loc[i,"thresh_upper"],df_s.loc[i,"thresh_lower"],df_s.loc[i,"open_kernel"],df_s.loc[i,"close_kernel"],combine)
@@ -333,8 +337,8 @@ def delete_folder_with_content(folder):
     folder : str : path to folder to delete
     '''
     exit_code = os.system('rm -rf '+folder)
-    if exit_code != 0: 
-        raise ValueError("Could not delete folder: "+folder)
+    #if exit_code != 0: 
+    #    raise ValueError("Could not delete folder: "+folder)
 
 def excel_to_segment_settings(excel_path): 
     '''
