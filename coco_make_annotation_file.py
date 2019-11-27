@@ -75,12 +75,10 @@ if exp_setup_file is not None:
     sample_info = strip_lines(sample_info)
     sample_info = sample_info.replace(";",",")
     if sample_info.count(",")<=(sample_info.count("\n")-1):
-        while "  " in sample_info: 
-            sample_info = sample_info.replace("  "," ")
-        while "\t\t" in sample_info: 
-            sample_info = sample_info.replace("\t\t","\t")
         sample_info = sample_info.replace(" ",",")
         sample_info = sample_info.replace("\t",",")
+        while ",," in sample_info: 
+            sample_info = sample_info.replace(",,",",")
     
     exp_stringio = StringIO(sample_info)
     
@@ -97,7 +95,7 @@ if exp_setup_file is not None:
         df.drop("stain_group",axis="columns",inplace=True)
     if "is_control" in exp_df.columns:
         df.drop("is_control",axis="columns",inplace=True)
-    
+    print(exp_df)
     df = df.merge(exp_df,on="well_id",how="left")
     
 print(df)

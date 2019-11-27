@@ -1,8 +1,11 @@
+import sys 
 import os
 import math
 import numpy as np
 import pandas as pd
 import cv2
+
+sys.setrecursionlimit(10**6) 
 
 IMGS_IN_MEMORY = True #Store channel images in memory instead of in written files
 MIN_CONTOUR_AREA = 5
@@ -22,19 +25,144 @@ TEST_SETTINGS_SHEET = "test_settings"
 SEGMENT_SETTINGS_SHEET = "segment_settings"
 ANNOTATION_SHEET = "annotation"
 PLOT_VARS_SHEET = "plot_vars"
+IMG_FILE_ENDING = ".ome.tiff"
 
 contour_id_counter = 0
 roi3d_id_counter = 0
 contour_chain_counter = 0
 
+class Image_info:
+
+    def __init__(self,raw_path,temp_folder,extracted_folder,pickle_folder=None):
+        self.raw_path = raw_path 
+        self.file_id = os.path.splitext(os.path.split(self.raw_path)[1])[0]
+        
+        self.extracted_folder = os.path.join(extracted_folder,self.file_id)
+        os.makedirs(self.extracted_folder,exist_ok=True)
+        
+        if pickle_folder is not None: 
+            self.pickle_path = os.path.join(pickle_folder,self.file_id+".pickle")
+        else: 
+            self.pickle_path = None
+        
+        self.extracted_images_info_file = os.path.join(self.extracted_folder,"files_info.txt")
+    
+    def get_extracted_files_path(self,extract_with_imagej=False):
+        if not os.path.exists(self.extracted_images_info_file):
+            if extract_with_imagej:
+                self.get_images_imagej()
+            else:
+                self.get_images_bfconvert()
+    
+        with open(self.extracted_images_info_file,'r') as f: 
+            images_paths = f.read().splitlines()
+        
+        return images_paths
+    
+    def get_images_bfconvert(self):
+        '''
+        Use bfconvert tool to get individual stack images from microscopy format file
+        '''
+        
+        global IMG_FILE_ENDING,VERBOSE
+        
+        bfconvert_info_str = "_INFO_%s_%t_%z_%c"
+        
+        out_name = self.file_id+bfconvert_info_str+IMG_FILE_ENDING 
+        out_name = os.path.join(self.extracted_folder,out_name)
+        log_file = os.path.join(os.path.split(self.extracted_folder)[0],"log_"+self.file_id+".txt")
+
+        cmd = "bfconvert -overwrite \"{file_path}\" \"{out_name}\" > {log_file}".format(file_path = self.raw_path,out_name = out_name,log_file=log_file)
+        
+        if VERBOSE: 
+            print(cmd)
+        exit_val = os.system(cmd)
+        if exit_val !=0:
+            raise RuntimeError("This command did not exit properly: \n"+cmd)
+        
+        img_paths = [] 
+        
+        for path in os.listdir(self.extracted_folder):
+            if path.endswith(IMG_FILE_ENDING):
+                img_paths.append(os.path.join(self.extracted_folder,path))
+        
+        with open(os.path.join(self.extracted_folder,self.extracted_images_info_file),'w') as f: 
+            for path in img_paths: 
+                f.write(path+"\n")
+        
+
+    def get_images_imagej(self):
+        '''
+        Use imagej to get individual stack images from microscopy format file. This script also stitch together images in x-y plane.
+        '''
+        
+        global IMG_FILE_ENDING,VERBOSE
+        info_split_str = "_INFO"
+
+        this_script_folder = os.path.split(os.path.abspath(__file__))[0]
+        imagej_macro_path = os.path.join(this_script_folder,"stitch_w_imagej.ijm")
+        
+        raw_path_full = os.path.abspath(self.raw_path)
+        fname = os.path.splitext(os.path.split(self.raw_path)[1])[0]
+        out_name = fname#+info_split_str+IMG_FILE_ENDING 
+        out_name = os.path.abspath(os.path.join(self.extracted_folder,out_name))
+        log_file = os.path.abspath(os.path.join(os.path.split(self.extracted_folder)[0],"log_"+fname+".txt"))
+       
+        cmd = "ImageJ-linux64 --ij2 --console -macro \"{imagej_macro_path}\" \"{file_path},{out_name}\"".format(imagej_macro_path = imagej_macro_path,file_path = raw_path_full,out_name = out_name,log_file = log_file)
+        
+        if VERBOSE:
+            print(cmd)
+        
+        bash_script = os.path.join(self.extracted_folder,"temp.sh")
+        with open(bash_script,"w") as f: 
+            f.write("#!/bin/sh\n")
+            f.write(cmd)
+
+        os.system("chmod u+x "+bash_script)
+
+        exit_val = os.system(bash_script)
+        
+        print("command exit_val = "+str(exit_val))
+        
+        if exit_val !=0:
+            print("NB! imagej command did not finish properly!")
+            #raise RuntimeError("This command did not exit properly: \n"+cmd)
+        
+        img_paths = os.listdir(self.extracted_folder)
+        for old_path in img_paths: 
+            if old_path.endswith(IMG_FILE_ENDING):
+                file_id,zid_and_channel = old_path.split("_INFO_",1)
+                zid_and_channel = zid_and_channel.split("-",4)
+                z_id = zid_and_channel[1]
+                channel = zid_and_channel[3]
+                new_path = file_id + "_INFO_0_0_"+z_id+"_"+channel+".ome.tiff"
+                os.rename(os.path.join(self.extracted_folder,old_path),os.path.join(self.extracted_folder,new_path))
+
+        img_paths = []
+        for path in os.listdir(self.extracted_folder):
+            if path.endswith(IMG_FILE_ENDING):
+                img_paths.append(os.path.join(self.extracted_folder,path))
+        
+        with open(self.extracted_images_info_file,'w') as f: 
+            for path in img_paths: 
+                f.write(path+"\n")
+        
+    
+    def __repr__(self):
+        string = "Img_file: raw_path = {r},extracted_folder = {e}, pickle_path = {p}".format(r = self.raw_path,e=self.extracted_folder,p=self.pickle_path)
+    
+    def __lt__(self,other):
+        return self.file_id < other.file_id
+        
 class Segment_settings: 
 
-    def __init__(self,channel_index,color,contrast,auto_max,thresh_type, thresh_upper, thresh_lower,open_kernel,close_kernel,combine):
+    def __init__(self,channel_index,global_max,color,contrast,auto_max,thresh_type, thresh_upper, thresh_lower,open_kernel,close_kernel,min_size,combine):
         '''
         Object for storing segmentation settings
 
         Params
         channel_index   : int           : Channel index of channnel these settings account for
+        global_max      : int           : Global threshold to apply before making images into 8-bit greyscale
         color           : str           : Color to convert channel into if needed in 8-bit BGR format. "B,G,R" where 0 <= b,g,r <= 255
         contrast        : float         : Increase contrast by this value. Multiplied by image. 
         auto_max        : bool          : Autolevel mask before segmenting
@@ -43,6 +171,7 @@ class Segment_settings:
         thresh_lower    : int           : Lower threshold value
         open_kernel     : int           : Size of open kernel 
         close_kernel    : int           : Size of closing kernel 
+        min_size        : int           : Remove all objects with area less than this value
         combine         : bool          : Whether or not this channel should be combined into combined value 
         '''
         global VERBOSE,TEMP_FOLDER,CONTOURS_STATS_FOLDER 
@@ -50,6 +179,8 @@ class Segment_settings:
         self.AVAILABLE_THRESH_TYPES = ["canny_edge","binary"] 
         
         self.channel_index = self.to_int_or_none(channel_index)
+        
+        self.global_max = self.to_int_or_none(global_max)
         
         if color is None: 
             self.color = color
@@ -82,6 +213,8 @@ class Segment_settings:
         self.close_kernel_int = close_kernel
         self.open_kernel = self.make_kernel(open_kernel)
         self.close_kernel = self.make_kernel(close_kernel)
+        
+        self.min_size = self.to_int_or_none(min_size)
 
         self.combine = combine 
 
@@ -97,6 +230,7 @@ class Segment_settings:
         Returns 
         kernel : np.array : Kernel of ones 
         '''
+        size = self.check_str_none(size)
         if size is None: 
             return None
         if pd.isna(size): 
@@ -108,6 +242,7 @@ class Segment_settings:
      
     def to_float_or_none(self,value): 
         # If value is not none, turn it into a int
+        value = self.check_str_none(value)
         if value is not None: 
             return float(value)
         else: 
@@ -115,17 +250,28 @@ class Segment_settings:
     
     def to_int_or_none(self,value): 
         # If value is not none, turn it into a int
+        value = self.check_str_none(value)
         if value is not None: 
-            return int(value)
+            return int(float(value))
         else: 
             return None
     
     def to_bool_or_none(self,value): 
         # If value is not none, turn it into a bool
+        value = self.check_str_none(value)
         if value is not None: 
             return bool(value)
         else: 
             return None
+            
+    def check_str_none(self,value):
+        #check if value is a None string and in that case make it None
+        value_str = str(value)
+        value = value_str.strip()
+        if value == "None" or value == "none":
+            return None
+        else:
+            return value
     
     def get_dict(self):
         data = {
@@ -142,23 +288,18 @@ class Segment_settings:
         return data
 
     def __repr__(self):
-        string = "{class_str}: channel = {ch}, color = {col},contrast = {c},auto_max = {a},thresh_type = {tt},thresh_upper = {tu}, thresh_lower = {tl},open_kernel = {ok}, close_kernel = {ck}".format(class_str = self.__class__.__name__,ch = self.channel_index,col=self.color,c=self.contrast,a=self.auto_max,tt=self.thresh_type,tu=self.thresh_upper,tl=self.thresh_lower,ok = self.open_kernel_int,ck = self.close_kernel_int)
+        string = "{class_str}: channel = {ch}, global_max = {g}, color = {col},contrast = {c},auto_max = {a},thresh_type = {tt},thresh_upper = {tu}, thresh_lower = {tl},open_kernel = {ok}, close_kernel = {ck}\n".format(class_str = self.__class__.__name__,ch = self.channel_index,g=self.global_max,col=self.color,c=self.contrast,a=self.auto_max,tt=self.thresh_type,tu=self.thresh_upper,tl=self.thresh_lower,ok = self.open_kernel_int,ck = self.close_kernel_int)
         return string
 
 class Zstack: 
 
-    def __init__(self,images,experiment,plate,time,well,img_numb,other_info,series_index,time_index):
+    def __init__(self,images,file_id,series_index,time_index):
         '''
         Object representing a z_stack
         
         Params
         images       : list : List of Images objects
-        experiment   : str  : Identifier string for experiment 
-        plate        : str  : Identifier string for plate 
-        time         : str  : Identifier string for day 
-        well         : str  : Identifier string for well
-        img_numb     : str  : Identifier string for image in the well
-        other_info   : str  : Other info about z_stack
+        file_id      : str  : Id that identifies the file 
         series_index : str  : Index of image series when imaging multiple location in one go 
         time_index   : str  : Index of time index in timed experiments
         '''
@@ -172,18 +313,11 @@ class Zstack:
         self.images = images
         self.images.sort()
         
-        self.experiment = experiment
-        self.plate = plate
-        self.time = time 
-        self.well = well
-        self.img_numb = img_numb
-        self.other_info = other_info
-
+        self.file_id = file_id 
         self.series_index = series_index 
         self.time_index = time_index 
         
-        self.img_id = str(self.experiment)+"_"+str(self.plate)+"_"+str(self.time)+"_"+str(self.well)+"_"+str(self.img_numb)+"_"+str(self.other_info)
-        self.id_z_stack = self.img_id+"_S"+str(self.series_index)+"_T"+str(self.time_index)
+        self.id_z_stack = str(self.file_id)+"_S"+str(self.series_index)+"_T"+str(self.time_index)
         
         self.mask_save_folder = os.path.join(TEMP_FOLDER,"masks",self.id_z_stack)
         os.makedirs(self.mask_save_folder,exist_ok = True)
@@ -236,6 +370,20 @@ class Zstack:
             
             if self.made_combined_masks:
                 i.combined_mask.find_contours()
+        if VERBOSE: print("")
+    
+    def group_contours(self,pixels_per_group = 250*250): 
+        #Group all contours to location groups in all Images objects 
+        n_div = int((self.img_dim[0]*self.img_dim[1])/pixels_per_group)
+        if VERBOSE: print("Grouping contours in z_stack: "+str(self)+" n_div = "+str(n_div))
+
+        for i in self.images: 
+            if VERBOSE: print(i.z_index,end="  ",flush=True)
+            for j in i.channels: 
+                j.group_contours(n_div)
+            
+            if self.made_combined_masks: 
+                i.combined_mask.group_contours(n_div)
         if VERBOSE: print("")
 
     def find_z_overlapping(self): 
@@ -355,12 +503,9 @@ class Zstack:
         df["y_res"] = self.physical_size["y"]
         df["z_res"] = self.physical_size["z"]
         df["res_unit"] = self.physical_size["unit"] 
-        df["experiment"] = self.experiment 
-        df["plate"] = self.plate 
-        df["time"] = self.time  
-        df["well"] = self.well 
-        df["img_numb"] = self.img_numb 
-        df["other_info"] = self.other_info 
+        df["img_dim_y"] = self.img_dim[0]
+        df["img_dim_x"] = self.img_dim[1]
+        df["file_id"] = self.file_id 
         df["series_index"]  = self.series_index  
         df["time_index"] = self.time_index  
 
@@ -401,16 +546,18 @@ class Zstack:
                 
                 if make_new_channel: 
                     new_channel_path = os.path.join(PROJECTIONS_RAW_FOLDER,self.id_z_stack+"_C"+str(j.channel_index)+".png")
+                    open(new_channel_path, 'a').close() #Create file temporarily, we will write it out properly after making the proper projection 
                     new_channel = Channel(new_channel_path,j.channel_index,None,j.color)
                     new_channel.image = j.get_image().copy()
                     projections.append(new_channel)
         
         max_channel_index = 0
         for p in projections: 
-            cv2.imwrite(p.full_path,p.get_image())
-        
             p.x_res = self.physical_size["x"]
             p.x_unit = self.physical_size["unit"]
+            p.image = p.get_img_for_viewing(scale_bar=add_scale_bar,auto_max=auto_max,colorize=colorize)
+            cv2.imwrite(p.full_path,p.image)
+        
             if p.channel_index > max_channel_index: 
                 max_channel_index = p.channel_index
         
@@ -418,11 +565,10 @@ class Zstack:
         
         composite_img = None
         for p in projections: 
-            p_modified = p.get_img_for_viewing(scale_bar=add_scale_bar,auto_max=auto_max,colorize=colorize)
             if composite_img is None: 
-                composite_img = p_modified
+                composite_img = p.get_image()
             else: 
-                composite_img = cv2.add(composite_img,p_modified) 
+                composite_img = cv2.add(composite_img,p.get_image()) 
         
         new_channel_path = os.path.join(PROJECTIONS_RAW_FOLDER,self.id_z_stack+"_Ccomp"+".png")
         cv2.imwrite(new_channel_path,composite_img)
@@ -448,7 +594,7 @@ class Zstack:
 
         df = pd.DataFrame({"full_path":full_paths,"file_name":file_id,"channel_index":channel_index})
         
-        df["file_id"] = self.img_id
+        df["file_id"] = self.file_id
         df["id_z_stack"] = self.id_z_stack 
         df["series_index"] = self.series_index
         df["time_index"] = self.time_index
@@ -462,8 +608,9 @@ class Zstack:
         Convert z_stack into a pdf that displays information about how each channel was segmented
         '''
         if VERBOSE: print("Making PDF from z_stack "+self.id_z_stack) 
-        df = pd.DataFrame() 
-        
+        processed_folder = os.path.join(TEMP_FOLDER,"z_stack_processed",self.id_z_stack)
+        os.makedirs(processed_folder,exist_ok=True)
+
         pdf_imgs = []
         x = 0
         y = 0
@@ -484,33 +631,33 @@ class Zstack:
 
                 data["type"] = "original"
                 data["auto_max"] = False 
-                pdf_imgs.append(Image_in_pdf(x,y,img_for_viewing_path,data.copy(),x_vars,y_vars,image_vars))
+                pdf_imgs.append(Image_in_pdf(x,y,img_for_viewing_path,data.copy(),x_vars,y_vars,image_vars,processed_folder,self.img_dim))
                 x = x + 1
                 
                 data["type"] = "w_contours"
                 data["auto_max"] = True
                 j.make_img_with_contours(self.img_w_contour_folder,scale_bar = True,auto_max = True,colorize=True)
-                pdf_imgs.append(Image_in_pdf(x,y,j.img_w_contour_path,data.copy(),x_vars,y_vars,image_vars))
+                pdf_imgs.append(Image_in_pdf(x,y,j.img_w_contour_path,data.copy(),x_vars,y_vars,image_vars,processed_folder,self.img_dim))
                 x = x + 1
             
             data["file_id"] = i.combined_mask.file_id
             data["type"] = "combined_mask"
             data["auto_max"] = None
             data["channel_id"] = -1
-            pdf_imgs.append(Image_in_pdf(x,y,i.combined_mask.mask_path,data.copy(),x_vars,y_vars,image_vars))
+            pdf_imgs.append(Image_in_pdf(x,y,i.combined_mask.mask_path,data.copy(),x_vars,y_vars,image_vars,processed_folder,self.img_dim))
             x = x + 1
             
             data["type"] = "w_contours"
             data["auto_max"] = None
             data["channel_id"] = -1
             i.combined_mask.make_img_with_contours(self.img_w_contour_folder,scale_bar = False,auto_max=False,colorize=False)
-            pdf_imgs.append(Image_in_pdf(x,y,i.combined_mask.img_w_contour_path,data.copy(),x_vars,y_vars,image_vars))
+            pdf_imgs.append(Image_in_pdf(x,y,i.combined_mask.img_w_contour_path,data.copy(),x_vars,y_vars,image_vars,processed_folder,self.img_dim))
             
             y = y + 1
             x = 0
 
         save_path = os.path.join(GRAPHICAL_SEGMENTATION_FOLDER,self.id_z_stack+".pdf")
-        pdf = Pdf(save_path,pdf_imgs,self.img_dim)
+        pdf = Pdf(save_path,pdf_imgs)
         pdf.make_pdf()
 
         return None
@@ -654,7 +801,7 @@ class Image:
         return string
 
 class Channel: 
-    def __init__(self,full_path,channel_index,z_index,color):
+    def __init__(self,full_path,channel_index,z_index,color,global_max=None):
         '''
         Object that represents a single channel in an image. 
 
@@ -663,6 +810,7 @@ class Channel:
         channel_index : int           : index of channels. Must start at 0 for first channel and iterate +1
         z_index       : int           : z_index of current channel 
         color         : (int,int,int) : 8-bit color of current channel in BGR format
+        global_max    : int           : global max to scale image to before changing it to 8-bit. If set to None images are assumed to be 8-bit 
         '''
         global VERBOSE 
         
@@ -683,19 +831,30 @@ class Channel:
         self.x_unit = None
         self.color = color
         
+        self.global_max = global_max
+        
         self.image = None 
         self.mask = None
         self.mask_path = None
         self.contours = None 
         self.n_contours = None
 
-        self.img_w_contour_path = None
-        
+        self.contour_groups = None
+
+        self.img_w_contour_path = None 
+
     def get_image(self):
         if self.image is not None: 
             return self.image 
-        else: 
-            image = cv2.imread(self.full_path,cv2.IMREAD_GRAYSCALE)
+        else:
+            image = cv2.imread(self.full_path,cv2.IMREAD_ANYDEPTH)
+            #if VERBOSE: print("Read image: "+self.full_path+"\tdtype: "+str(image.dtype))
+            if image is None: 
+                raise RuntimeError("Could not read image: "+self.full_path)
+            
+            if self.global_max is not None: 
+                image = cv2.convertScaleAbs(image, alpha=(255.0/self.global_max))
+                #if VERBOSE: print("global_max is set to "+str(self.global_max)+" using that and converting image to dtype: "+str(image.dtype))
             
             global IMGS_IN_MEMORY 
             if IMGS_IN_MEMORY: 
@@ -866,6 +1025,20 @@ class Channel:
         
         '''
         
+        def remove_small_objects(image,min_size): 
+            #Remove all objects that is smaller than min_size
+            if min_size == 0: 
+                return image
+            
+            nb_components, output, stats, centroids = cv2.connectedComponentsWithStats(image, connectivity=8)
+            sizes = stats[1:, -1]; nb_components = nb_components - 1
+
+            img2 = np.zeros((output.shape),np.uint8)
+            for i in range(0, nb_components):
+                if sizes[i] >= min_size:
+                    img2[output == i + 1] = 255
+            return img2
+        
         img = self.get_image().copy()
         assert img is not None, "Can't make mask out of Image == None"
         
@@ -887,12 +1060,15 @@ class Channel:
                 ret,img = cv2.threshold(img,s.thresh_lower,s.thresh_upper,cv2.THRESH_BINARY)
             else:
                 raise ValueError(str(thresh_type)+" is not an available threshold method")
-
-            if type(s.close_kernel) is np.ndarray:  
-                img = cv2.morphologyEx(img,cv2.MORPH_CLOSE,s.close_kernel)
             
             if type(s.open_kernel) is np.ndarray:  
                 img = cv2.morphologyEx(img, cv2.MORPH_OPEN, s.open_kernel)
+                
+            if type(s.close_kernel) is np.ndarray:  
+                img = cv2.morphologyEx(img,cv2.MORPH_CLOSE,s.close_kernel)
+                
+            if s.min_size is not None: 
+                img = remove_small_objects(img,s.min_size)
         
         assert img is not None, "Mask is none after running function. That should not happen"
         
@@ -931,6 +1107,27 @@ class Channel:
         self.n_contours = len(self.contours) 
         return None
 
+    def group_contours(self,n_div=200):
+        '''
+        Group contours into areas they overlap so you don't need to check all contours with all contours 
+
+        Params
+        n_div : int : number of rectangles to convert image into
+        '''
+        image_dim = self.get_image().shape 
+        image_dim = (image_dim[0],image_dim[1])
+        self.contour_groups = Contour_groups(image_dim,n_div)
+        
+        for c in self.contours:
+            self.contour_groups.add_contour(c)
+    
+    def get_group_contours(self,group_names): 
+        if self.contour_groups is None: 
+            if VERBOSE: print("Contours not grouped, using whole list")
+            return self.contours
+        else: 
+            return self.contour_groups.get_contours_in_group(group_names)
+
     def find_z_overlapping(self,next_z):
         '''
         Find all contours in next z plane in same channel that overlaps with this object
@@ -944,10 +1141,10 @@ class Channel:
     def print_all(self):
         print("\t\t",end="")
         print(self)
-        if self.contours is not None: 
-            for i in self.contours: 
-                i.print_all()
-
+        #if self.contours is not None: 
+        #    for i in self.contours: 
+        #        i.print_all()
+    
     def get_physical_res(self,xml_folder):
         '''
         Find physical resolution from ome.tiff file
@@ -1026,16 +1223,17 @@ class Channel:
         
         #Try to catch the most common weird characters
         unit = x_unit 
+        if VERBOSE: print("Unit raw: "+str(unit)+", as unicode: "+str(unit.encode()),end = " ")
+        unit = unit.replace("\u03Bc","u") #unicode for greek mu symbol
         unit = unit.replace("µ","u") #micro symbol
-        unit = unit.replace("μ","u") #Greek mu symbol
-        unit = unit.replace("µ","u") #copied from console 
+        if VERBOSE: print(" After fixing: "+str(unit))
 
         if WARNINGS: 
             is_ascii_str = lambda s: len(s) == len(s.encode())
             if not is_ascii_str(unit): 
                 print("Warning: One of the characters in unit is not compatible with ASCII and you might get some problems downstream. unit = "+str(unit))
 
-        physical_size["unit"] = x_unit
+        physical_size["unit"] = unit
 
         if VERBOSE:
             print("For object: \""+str(self)+"\" I found physical size: "+str(physical_size))
@@ -1091,6 +1289,8 @@ class Contour:
         self.contour_box = self.get_contour_rectangle()
         self.contour_mask = None
         self.roi_3d_id = None #Id of this chain of rois that make up a single Roi_3d
+
+        self.group_name = []
 
         self.data = None#self.contour_stats()
     
@@ -1238,8 +1438,11 @@ class Contour:
         overlapping    : list of Contour : Contours in other channel that is overlapping 
         '''
         overlapping = []
-        for other_contour in other_channel.contours: 
+        other_contours = other_channel.get_group_contours(self.group_name)
+        for other_contour in other_contours: 
             overlaps = self.contour_box.overlaps(other_contour.contour_box)
+            if self.contour_box.get_area() < 36: # box is small, assuming overlap
+                overlapping.append(other_contour) 
             if overlaps: 
                 other_contour_mask = np.zeros(self.contour_box.get_height_and_width(),dtype="uint8")
                 new_points = other_contour.points_new_origo(self.contour_box.top_left)
@@ -1359,6 +1562,131 @@ class Contour:
         string = "{class_str}, contour_index: {class_id}, n_points: {n}, roi_3d_id: {roi}".format(class_str = self.__class__.__name__,class_id = self.id_contour,n = len(self.points),roi = self.roi_3d_id)
         return string
 
+class Contour_groups: 
+
+    def __init__(self,img_dim,n_div):
+        '''
+        Location groups for contours in image. Each contour gets a Contour_group that is the closest to its location. 
+
+        img_dim : tuple of int : Dimensions of image (y,x)
+        n_div   : int          : Number of 
+        '''
+        self.img_dim = img_dim 
+
+        ratio = self.img_dim[0]/self.img_dim[1]
+
+        self.n_y = int(np.sqrt(n_div*ratio))#n_div = x*y, x = y/ratio, solving for y
+        self.n_x = int(self.n_y/ratio)
+
+        self.n_tot = self.n_y * self.n_x
+        
+        self.y_step = self.img_dim[0]/self.n_y 
+        self.x_step = self.img_dim[1]/self.n_x 
+
+        self.contour_groups = {}
+
+        for y in range(self.n_y):
+            for x in range(self.n_x):
+                actual_y = int((y+0.5) * self.y_step)
+                actual_x = int((x+0.5) * self.x_step)
+                group = Contour_group((x,y), (self.x_step,self.y_step))
+                self.contour_groups[group.name] = group
+
+    def add_contour(self,contour):
+        '''
+        Find the Contour_group that is the closest to the contour
+
+        contour : Contour : Contour to add to Contour_group 
+        '''
+        for key in self.contour_groups.keys(): 
+            c = self.contour_groups[key]
+            if c.rect.overlaps(contour.contour_box): 
+                c.contours.append(contour)
+                contour.group_name.append(c.name)
+        
+        assert len(contour.group_name) > 0,"Contour did not get a group name!"
+    
+    def get_contours_in_group(self,group_names): 
+        
+        out_contours = []
+        for g in group_names: 
+            out_contours = out_contours + self.contour_groups[g].contours
+        
+        return out_contours
+
+    def print_matrix(self,terminal_width = 120):
+        '''
+        Print a pretty matrix with info about object
+
+        terminal_width : int : maximal length width of output. Adding just dots past that
+        '''
+        prev_y = -1
+        out_str = []
+        this_line = ""
+        max_width = 20 
+        for key in self.contour_groups.keys():
+            c = self.contour_groups[key]
+            str_to_add = c.short_repr() 
+            while len(str_to_add) < max_width: 
+                str_to_add = str_to_add + " "
+            
+            if c.y != prev_y: 
+                out_str.append(this_line)
+                this_line = ""
+                prev_y = c.y
+            
+            if len(this_line) < (terminal_width-5): 
+                this_line = this_line + str_to_add
+
+        for l in out_str: 
+            print(l,end="")
+            if len(l) >= (terminal_width-5): 
+                print("...",end="")
+            print("")
+
+    def draw_rectangles(self,img): 
+        colors = [(255,0,0),(0,255,0),(0,0,255),(255,255,255),(255,0,255),(255,255,0)]
+        colors_i = 0
+        for key in self.contour_groups.keys():
+            c = self.contour_groups[key]
+            c.rect.draw(img,colors[colors_i])
+            colors_i = colors_i + 1
+            if colors_i >= (len(colors)-1):
+                colors_i = 0
+
+    def __repr__(self):
+        return "{class_str}: img_dim={img_dim}, n_y={ny}, n_x={nx}, n_tot={ntot}".format(class_str = self.__class__.__name__,img_dim = self.img_dim,ny=self.n_y,nx = self.n_x,ntot=self.n_tot)
+
+class Contour_group: 
+    def __init__(self,xy_center,step_xy): 
+        '''
+        Class that represents one position in the image. All contours that are closest to this one belongs to this group
+        '''
+        self.step_xy = step_xy 
+
+        #describing center
+        self.x = xy_center[0]
+        self.y = xy_center[1]
+        self.actual_x = int((self.x+0.5)*self.step_xy[0]) 
+        self.actual_y = int((self.y+0.5)*self.step_xy[1])
+
+        self.name = "x"+str(self.x)+"y"+str(self.y)
+        
+        x1 = self.actual_x - (self.step_xy[0]/2) -2 
+        y1 = self.actual_y - (self.step_xy[1]/2) -2
+        x2 = self.actual_x + (self.step_xy[0]/2) +2
+        y2 = self.actual_y + (self.step_xy[1]/2) +2
+        self.rect = Rectangle([x1,y1,x2,y2])
+        
+        self.contours = []
+    
+    def short_repr(self): 
+        return self.name + "("+str(self.actual_x)+","+str(self.actual_y)+")"
+
+    def __repr__(self):
+        n_contours = len(self.contours)
+        return "{class_str}: name = {name}, x={x}, y={y}, n_contours={n}".format(class_str = self.__class__.__name__,name=self.name,x=self.x,y=self.y,n = n_contours)
+
 class Roi_3d: 
 
     def __init__(self,id_roi_3d,contours,z_stack,channel_index):
@@ -1410,12 +1738,7 @@ class Roi_3d:
             "y_res"        : self.z_stack.physical_size["y"],
             "z_res"        : self.z_stack.physical_size["z"],
             "res_unit"     : self.z_stack.physical_size["unit"], 
-            "experiment"   : self.z_stack.experiment, 
-            "plate"        : self.z_stack.plate, 
-            "time"         : self.z_stack.time,  
-            "well"         : self.z_stack.well, 
-            "img_numb"     : self.z_stack.img_numb, 
-            "other_info"   : self.z_stack.other_info, 
+            "file_id"      : self.z_stack.file_id, 
             "series_index" : self.z_stack.series_index,  
             "time_index"   : self.z_stack.time_index,
             "channel_index": self.channel_index,
@@ -1425,7 +1748,9 @@ class Roi_3d:
             "n_contours"   : len(self.contours),
             "contour_ids"  : None,
             "contours_centers_xyz" : None,
-            "img_dim_yx" : self.z_stack.img_dim,
+            "biggest_xy_area":None,
+            "img_dim_y" : self.z_stack.img_dim[0],
+            "img_dim_x" : self.z_stack.img_dim[1],
             "mean_x_pos" : None,
             "mean_y_pos" : None,
             "mean_z_index" : None, 
@@ -1471,6 +1796,11 @@ class Roi_3d:
             else:
                 data["contours_centers_xyz"] = data["contours_centers_xyz"]+","+center
            
+            if data["biggest_xy_area"] is None: 
+                data["biggest_xy_area"] = c.data["area"]
+            elif data["biggest_xy_area"] < c.data["area"]:
+                data["biggest_xy_area"] = c.data["area"]
+
             sum_x_pos += int(c.data["centroid_x"])
             sum_y_pos += int(c.data["centroid_y"])
             sum_z_pos += int(c.data["z_index"])
@@ -1597,22 +1927,42 @@ class Rectangle:
         
         return Rectangle([x1,y1,x2,y2])
     
+    def get_area(self): 
+        #Get area of rectangle 
+        width,height = self.get_height_and_width()
+        return width*height
+
+    def draw(self,img,colour): 
+        '''
+        Draw rectangle in image
+        
+        Params
+        img    : cv2 image    : image to draw rectangle in
+        colour : tuple of int : 8 bit Color (b,g,r) 
+        '''
+        a = (int(self.top_left.x),int(self.top_left.y))
+        b = (int(self.bottom_right.x),int(self.bottom_right.y))
+        cv2.rectangle(img,a,b,colour,1)
+    
     def __repr__(self):
         return("Rectangle([{x1},{y1},{x2},{y2})]".format(x1=self.top_left.x,y1=self.top_left.y,x2=self.bottom_right.x,y2=self.bottom_right.y))
 
 class Image_in_pdf:
     
-    def __init__(self,x,y,img_path,data,x_vars,y_vars,image_vars):
+    def __init__(self,x,y,img_path,data,x_vars,y_vars,image_vars,processed_folder,goal_img_dim,max_size=5000*5000):
         '''
         Information about single image that is needed to make Pdf document
         
         Params
-        x           : int         : Relative x position of image. zero-indexed
-        y           : int         : Relative y position of image. zero-indexed
-        data        : dict        : Dictionary with all the metadata about image to plot in annotation boxes around images
-        x_vars      : x_vars      : Variables in "data" to plot on x-axis annotation fields 
-        y_vars      : y_vars      : Variables in "data" to plot on y-axis annotation fields 
-        Image_vars  : list of str : Variables in "data" to plot on top of image
+        x                : int          : Relative x position of image. zero-indexed
+        y                : int          : Relative y position of image. zero-indexed
+        data             : dict         : Dictionary with all the metadata about image to plot in annotation boxes around images
+        x_vars           : x_vars       : Variables in "data" to plot on x-axis annotation fields 
+        y_vars           : y_vars       : Variables in "data" to plot on y-axis annotation fields 
+        Image_vars       : list of str  : Variables in "data" to plot on top of image
+        processed_folder : str          : Folder with images that have right dimensions and ratio
+        goal_img_dim     : tuple of int : (y,x) dimensions that specifies the ratio image must be. 
+        max_size         : int          : maximal size of image in MP. If it is bigger than this it is reduced to that size. 
         '''
         self.x = x
         self.y = y
@@ -1621,26 +1971,124 @@ class Image_in_pdf:
         self.x_vars = x_vars
         self.y_vars = y_vars
         self.image_vars = image_vars
+        
+        self.file_id = os.path.splitext(os.path.split(self.img_path)[1])[0]
+        self.processed_path = os.path.join(processed_folder,self.file_id+".jpg")
+        
+        self.goal_img_dim = goal_img_dim
+        self.goal_ratio = float(self.goal_img_dim[1])/float(self.goal_img_dim[0])
+        
+        self.max_size = max_size 
+        
+        self.img = None 
+        self.img_dim = None
+        self.old_dim = None
+        
+        self.changed_image = False 
+        
+        if not os.path.exists(self.processed_path):
+            self.img = cv2.imread(self.img_path)
+            self.img_dim = self.img.shape
+            self.old_dim = self.img_dim
+            self.to_max_size()
+            self.to_right_ratio()
+            self.write_image()
+        
+        #if VERBOSE: print(self)
+        
+    def write_image(self): 
+        #Write image to processed_path, change image path and delete from memory
+        if self.changed_image: 
+            cv2.imwrite(self.processed_path,self.img)
+            self.img_path = self.processed_path
+        self.img = None
+    
+    def to_right_ratio(self):
+        #If image has a different ratio than Crop image so that it has the goal_img_dim ratio. 
+        
+        img_ratio = float(self.img_dim[1])/float(self.img_dim[0])
+        if not ((self.goal_ratio - 0.01) < img_ratio < (self.goal_ratio + 0.01)):
+            if VERBOSE: print("Changing ratio")
+            self.changed_image = True
+            
+            if img_ratio < self.goal_ratio:
+                new_width = int((img_ratio/self.goal_ratio)*float(self.img_dim[0]))
+                new_height = int(self.img_dim[0])
+            else:
+                new_height  = int(self.img_dim[0])
+                new_width = int(new_height/self.goal_ratio)
+            
+            self.img = self.imcrop(self.img,[0,0,new_height,new_width],value=(150,150,150))
+            self.img_dim = self.img.shape
+    
+    def to_max_size(self):
+        #If image is to big, convert it to self.max_size
+        img_size = self.img_dim[0]*self.img_dim[1]
+        
+        if img_size > self.max_size: 
+            if VERBOSE: print("Shrinking to max size")
+            self.changed_image = True
+            ratio = np.sqrt(self.max_size)/np.sqrt(img_size)
+            new_dim = (int(self.img_dim[1]*ratio),  int(self.img_dim[0]*ratio))
+            
+            self.img = cv2.resize(self.img,new_dim)
+            self.img_dim = self.img.shape
+    
+    def imcrop(self,img,bbox,value=150):
+        """
+        Crop image with border equal value if it is outside image
+        
+        Params
+        img     : np.array    : cv2 image
+        bbox    : list of int : [x1,y1,x2,y2]
+        value   :             : color of added border
+
+        Returns
+        img     : np.array    : cv2 image with border 
+        """
+        x1 = int(bbox[0])
+        y1 = int(bbox[1])
+        x2 = int(bbox[2])
+        y2 = int(bbox[3])
+        if x1 < 0 or y1 < 0 or x2 > img.shape[1] or y2 > img.shape[0]:
+            img, x1, x2, y1, y2 = self.pad_img_to_fit_bbox(img, x1, x2, y1, y2,value=value)
+        return img[y1:y2, x1:x2]
+    
+    def pad_img_to_fit_bbox(self,img, x1, x2, y1, y2,value=255):
+        """
+        Add border to image and return modified coordinates after border addition
+        
+        Params
+        img             : numpy array   : image
+        x1,x2,y1,y2:    : int           : coordinates
+        Returns
+        img             : numpy array   : image
+        x1,x2,y1,y2:    : int           : coordinates after padding
+        """
+        img = cv2.copyMakeBorder(img, - min(0, y1), max(y2 - img.shape[0], 0), -min(0, x1), max(x2 - img.shape[1], 0),cv2.BORDER_CONSTANT,value=value)
+        y2 += -min(0, y1)
+        y1 += -min(0, y1)
+        x2 += -min(0, x1)
+        x1 += -min(0, x1)
+        return img, x1, x2, y1, y2
     
     def __repr__(self):
-        string = "{class_str}: xy: ({x},{y}), {data}".format(class_str = self.__class__.__name__,x = self.x,y = self.y, data = self.data)
+        string = "{class_str}: path = {p}, xy = ({x},{y}), old_dim = {od}, new_dim = {nd},goal_img_dim = {gd}".format(class_str = self.__class__.__name__,p=self.img_path,x = self.x,y = self.y, od = self.old_dim,nd = self.img_dim,gd = self.goal_img_dim)
         return string
 
 class Pdf:
     
-    def __init__(self,save_path,images_in_pdf,image_dim):
+    def __init__(self,save_path,images_in_pdf):
         '''
         Plot images in a pdf sorted by info about images
         
         Params
         save_path     : str                  : Path to save pdf in
         images_in_pdf : list of Image_in_pdf : List of objects with information about image path, location in pdf and x and y variables to plot
-        image_dim     : tuple of int         : image format in pixels [height,width]. Adds grey border to images not in this aspect ratio 
         '''
         
         self.save_path = save_path
         self.images_in_pdf = images_in_pdf
-        self.image_dim = image_dim
         
         self.check_overlapping_imgs()
         
@@ -1738,7 +2186,7 @@ class Pdf:
         area_meta_yvars = (0,(len(self.images_in_pdf[0].y_vars))*annotate_box_height)
         area_meta_xvars = (0,(len(self.images_in_pdf[0].x_vars))*annotate_box_height)
         marg = 2
-        goal_aspect_ratio = self.image_dim[0]/self.image_dim[1]
+        goal_aspect_ratio = self.images_in_pdf[0].goal_img_dim[0]/self.images_in_pdf[0].goal_img_dim[1]
 
         img_width = (c_width-area_meta_yvars[1])/(x_max+1)
         img_height = img_width * goal_aspect_ratio

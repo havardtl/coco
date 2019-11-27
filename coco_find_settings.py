@@ -9,8 +9,9 @@ parser.add_argument('--raw_data',default="raw/rawdata",type=str,help='Path to ra
 parser.add_argument('--extracted_images_folder',type=str,default='raw/extracted_raw',help="Folder with extracted images.")
 parser.add_argument('--out_folder',type=str,default = 'graphical/find_segment_settings', help='Output folder for segmentation test results')
 parser.add_argument('--annotation_file',type=str,default='annotation1.xlsx',help="Excel file with test settings to try all combinations of. Make it with coco_make_annotation_file.py.")
-parser.add_argument('--z_toshow',type = str,default="i5",help='z-slices to include. "1:3" = [1,2,3],"1,5,8" = [1,5,8] and "i3" = 3 evenly choosen from range. Default = "i3"')
+parser.add_argument('--z_toshow',type = str,default="i3",help='z-slices to include. "1:3" = [1,2,3],"1,5,8" = [1,5,8] and "i3" = 3 evenly choosen from range. Default = "i3"')
 parser.add_argument('--temp_folder',type=str,default='raw/temp',help="temp folder for storing temporary images. default: ./coco_temp")
+parser.add_argument('--max_size',type=int,default=1000*1000,help="Maximal size for images in PDF in MP")
 parser.add_argument('--debug',action='store_true',default=False,help='Run in verbose mode')
 parser.add_argument('--verbose',action='store_true',default=False,help='Verbose mode')
 args = parser.parse_args()
@@ -41,10 +42,12 @@ pdf_save_folder = os.path.join(args.out_folder,"segmented_pdfs")
 viewing_automax_false = os.path.join(args.temp_folder,"find_settings_automax_false")
 viewing_automax_true  = os.path.join(args.temp_folder,"find_settings_automax_true")
 mask_save_folder = os.path.join(args.temp_folder,"test_settings_masks")
+pdf_processed_images_folder = os.path.join(args.temp_folder,"pdf_processed_images")
 
 oi.delete_folder_with_content(viewing_automax_false)
 oi.delete_folder_with_content(viewing_automax_true)
 oi.delete_folder_with_content(mask_save_folder)
+oi.delete_folder_with_content(pdf_processed_images_folder)
 
 os.makedirs(args.out_folder,exist_ok=True)
 os.makedirs(args.temp_folder,exist_ok=True)
@@ -53,6 +56,7 @@ os.makedirs(pdf_save_folder,exist_ok=True)
 os.makedirs(mask_save_folder,exist_ok=True)
 os.makedirs(viewing_automax_false,exist_ok=True)
 os.makedirs(viewing_automax_true,exist_ok=True)
+os.makedirs(pdf_processed_images_folder,exist_ok=True)
 
 if args.debug: 
     args.verbose = True
@@ -86,8 +90,11 @@ else:
     print("Extracting images...")
     images_paths = oi.get_images_bfconvert(raw_img_path,extracted_images_folder_this_img,images_paths_file,args.verbose)
 
+if args.verbose: print("loading segment settings from "+args.annotation_file)
+segment_settings = oi.excel_to_segment_settings(args.annotation_file)
+
 if args.verbose: print("Converting image paths to channels.",end = " ")
-channels = oi.img_paths_to_channel_classes(images_paths)
+channels = oi.img_paths_to_channel_classes(images_paths,segment_settings)
 
 if args.verbose: print("Making test settings from file: "+str(args.annotation_file))
 order = ["contrast","auto_max","open_kernel","close_kernel","thresh_type","thresh_upper","thresh_lower"]
@@ -143,25 +150,31 @@ for i in df["channel_index"].unique():
         data[field] = None
 
     for j in this_channel.index:
+        auto_max = False 
         c = this_channel.loc[j,"channel"]
-        c.make_img_for_viewing(viewing_automax_false,scale_bar=False,auto_max=False,colorize=False)
-    
-        data["file_id"]  = c.img_for_viewing_path 
+        img = c.get_img_for_viewing(scale_bar=False,auto_max=auto_max,colorize=True)
+        img_path = os.path.join(viewing_automax_false,c.file_id+".png")
+        cv2.imwrite(img_path,img)
+
+        data["file_id"]  = img_path 
         data["z_index"]  = this_channel.loc[j,"z_index"]
-        data["auto_max"] = False
-        pdf_imgs.append(classes.Image_in_pdf(x,y,c.img_for_viewing_path,data.copy(),x_vars,y_vars,image_vars))
+        data["auto_max"] = auto_max 
+        pdf_imgs.append(classes.Image_in_pdf(x,y,img_path,data.copy(),x_vars,y_vars,image_vars,pdf_processed_images_folder,img_dim,args.max_size))
         x = x + 1 
     y = y +1
     x = 0
 
     for j in this_channel.index:
+        auto_max = True
         c = this_channel.loc[j,"channel"]
-        c.make_img_for_viewing(viewing_automax_true,scale_bar=False,auto_max=True,colorize=False)
-        
-        data["file_id"]  = c.img_for_viewing_path 
+        img = c.get_img_for_viewing(scale_bar=False,auto_max=auto_max,colorize=True)
+        img_path = os.path.join(viewing_automax_true,c.file_id+".png")
+        cv2.imwrite(img_path,img)
+
+        data["file_id"]  = img_path  
         data["z_index"]  = this_channel.loc[j,"z_index"]
-        data["auto_max"] = True
-        pdf_imgs.append(classes.Image_in_pdf(x,y,c.img_for_viewing_path,data.copy(),x_vars,y_vars,image_vars))
+        data["auto_max"] = auto_max
+        pdf_imgs.append(classes.Image_in_pdf(x,y,img_path,data.copy(),x_vars,y_vars,image_vars,pdf_processed_images_folder,img_dim,args.max_size))
         x = x + 1 
     y = y + 1 
     x = 0
@@ -178,12 +191,12 @@ for i in df["channel_index"].unique():
             data["file_id"]  = mask_path
             data["z_index"]  = this_channel.loc[j,"z_index"]
             data.update(s.get_dict())
-            pdf_imgs.append(classes.Image_in_pdf(x,y,mask_path,data.copy(),x_vars,y_vars,image_vars))
+            pdf_imgs.append(classes.Image_in_pdf(x,y,mask_path,data.copy(),x_vars,y_vars,image_vars,pdf_processed_images_folder,img_dim,args.max_size))
             x = x + 1 
         y = y + 1
         x = 0
 
-    pdf = classes.Pdf(pdf_save_path,pdf_imgs,img_dim)
+    pdf = classes.Pdf(pdf_save_path,pdf_imgs)
     pdf.make_pdf()
 
 

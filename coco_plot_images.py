@@ -18,6 +18,7 @@ parser.add_argument('--stitch',action="store_true",default=False,help='Stitch to
 parser.add_argument('--verbose',action='store_true',default=False,help='Verbose mode')
 parser.add_argument('--debug',action='store_true',default=False,help='Run in verbose mode and with one core for debugging')
 parser.add_argument('--overwrite',action = 'store_true',default=False,help='Overwrite all files rather than re-using exisiting files. NB! does this by deleting --temp_folder, --projections_raw_folder, --projections_pdf_folder and all their content')
+parser.add_argument('--max_size',type=int,default=1500*1500,help="Maximal size in total pixels of images in output pdf. NB! Unstable over 5000*5000")
 args = parser.parse_args()
 
 ########################
@@ -58,54 +59,44 @@ classes.VERBOSE = args.verbose
 classes.TEMP_FOLDER = args.temp_folder 
 classes.PROJECTIONS_RAW_FOLDER = args.projections_raw_folder
 
+pdf_processed_images_folder = os.path.join(args.temp_folder,"pdf_processed_images")
+
 os.makedirs(args.projections_pdf_folder,exist_ok = True)
 os.makedirs(args.projections_raw_folder,exist_ok=True)
 os.makedirs(args.temp_folder,exist_ok = True)
 os.makedirs(args.extracted_images_folder,exist_ok=True)
+os.makedirs(pdf_processed_images_folder,exist_ok=True)
 
 pickle_path = os.path.join(args.temp_folder,"coco_plot_images_df.pickle")
 
-image_ids_all = os.listdir(args.raw_data)
-for i in range(len(image_ids_all)): 
-    image_ids_all[i] = os.path.join(args.raw_data,image_ids_all[i])
-image_ids_all.sort()
+raw_imgs = []
+for i in os.listdir(args.raw_data): 
+    raw_path = os.path.join(args.raw_data,i)
+    img_i = classes.Image_info(raw_path,args.temp_folder,args.extracted_images_folder)
+    raw_imgs.append(img_i)
+raw_imgs.sort()
+
+print("Found {n_files} to process".format(n_files = len(raw_imgs)))
 
 if not args.n_process is None:
-    image_ids_all = image_ids_all[0:args.n_process]
-
-print("Found {n_files} to process".format(n_files = len(image_ids_all)))
+    raw_imgs = raw_imgs[0:args.n_process]
 
 segment_settings = oi.excel_to_segment_settings(args.annotation_file)
 
-def main(raw_img_path,info,segment_settings):
+def main(image_info,info,segment_settings):
     '''
     Process one file of the program 
 
     Params
-    raw_img_path     : str          : Path to microscopy image file to process
-    info             : str          : Info about the image that is processed to be printed
-    segment_settings : pd.DataFrame : Data frame with segmentation settings. rows = channels, columns = setting. See oi.get_processed_mask for settings needed.
+    image_info       : Image_info               : Information about file to process
+    info             : str                      : Info about the image that is processed to be printed
+    segment_settings : list of Segment_settings : Information about how to process images
     '''
     global args
 
-    img_id = os.path.splitext(os.path.split(raw_img_path)[1])[0]
-
-    extracted_images_folder_this_img = os.path.join(args.extracted_images_folder,img_id)
+    print(info+"\traw_img_path: "+image_info.raw_path+"\t Making projections")
     
-    print_str = info+"\traw_img_path: "+raw_img_path+"\t"
-   
-    images_paths_file = "files_info.txt"
-
-    if os.path.isfile(os.path.join(extracted_images_folder_this_img,images_paths_file)): 
-        print(print_str+"Images already extracted from raw files, using those to make projections.")
-        with open(os.path.join(extracted_images_folder_this_img,images_paths_file),'r') as f: 
-            images_paths = f.read().splitlines()
-    elif not args.stitch:
-        print(print_str+"Extracting images with bfconvert")
-        images_paths = oi.get_images_bfconvert(raw_img_path,extracted_images_folder_this_img,images_paths_file,verbose = args.verbose)
-    else: 
-        print(print_str+"Extracting images with ImageJ and stitching in xy-plane")
-        images_paths = oi.get_images_imagej(raw_img_path,extracted_images_folder_this_img,images_paths_file,verbose = args.verbose)
+    images_paths = image_info.get_extracted_files_path(extract_with_imagej=args.stitch)
 
     if args.verbose: print("Getting info about z_stacks: ")
     df = pd.DataFrame()
@@ -129,19 +120,19 @@ else:
     else:
         cores = args.cores
 
-    tot_images = len(image_ids_all)
+    tot_images = len(raw_imgs)
 
     image_info = []
     if cores==1: 
-        for i in range(0,len(image_ids_all)):
+        for i in range(0,len(raw_imgs)):
             info = str(i+1)+"/"+str(tot_images)
-            image_info.append(main(image_ids_all[i],info,segment_settings))
+            image_info.append(main(raw_imgs[i],info,segment_settings))
     else: 
         pool = mp.Pool(cores)
 
-        for i in range(0,len(image_ids_all)):
+        for i in range(0,len(raw_imgs)):
             info = str(i+1)+"/"+str(tot_images)
-            image_info.append(pool.apply_async(main,args=(image_ids_all[i],info,segment_settings)))
+            image_info.append(pool.apply_async(main,args=(raw_imgs[i],info,segment_settings)))
 
         pool.close()
         pool.join()
@@ -152,11 +143,6 @@ else:
     for i in image_info: 
         df = pd.concat([df,i],ignore_index=True)
         
-    print("Convert all images to the same ratio")
-    cropped_projection_folder = os.path.join(args.temp_folder,"cropped_projections")
-    os.makedirs(cropped_projection_folder,exist_ok=True)
-    df = oi.all_images_in_same_ratio(df,cropped_projection_folder)
-
     with open(pickle_path,"wb") as f: 
         pickle.dump(df,f)
     print("Wrote info about extracted images to pickle: "+pickle_path)
@@ -192,5 +178,5 @@ y_vars_sortdirs = list(plot_vars.loc[plot_vars["plot_axis"]=="y","sort_ascending
 
 sort_directions = file_vars_sortdirs+y_vars_sortdirs+x_vars_sortdirs
 
-oi.plot_images_pdf(args.projections_pdf_folder,df,file_vars,x_vars,y_vars,image_vars,image_dim = image_dim_goal,sort_ascending = sort_directions)
+oi.plot_images_pdf(args.projections_pdf_folder,df,file_vars,x_vars,y_vars,image_vars,image_dim_goal,pdf_processed_images_folder,sort_directions)
 
