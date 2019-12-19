@@ -9,5 +9,8 @@ Confocal counter (coco) that extracts information about objects from confocal im
 - Write a good readme
 - Add output with projection and each object number
 - Add possibility to add manual annotation of organoids and other annotations
-- Reduce amount of repeated code in each file run in command line
 - Add log file for each run so that you know settings used to segment. (git log -1 --format="%H" gives commit hash)
+
+
+#dependencies
+conda install cv2 pandas openpyxl xlrd reportlab
