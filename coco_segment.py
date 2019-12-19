@@ -5,7 +5,8 @@
 #######################
 import argparse
 parser = argparse.ArgumentParser(description = 'Segment objects in confocal images and extracts their information.')
-parser.add_argument('--raw_data',default="raw/rawdata",type=str,help='Folder with all raw data. Does not look for files in sub-folders. Can use all formats accepted by your installed version of bftools.')
+parser.add_argument('--raw_folder',default="raw/rawdata",type=str,help='Folder with all raw data. Does not look for files in sub-folders. Can use all formats accepted by your installed version of bftools.')
+parser.add_argument('--raw_file',type=str,help='Supply a single raw file to process. Ignores --raw_folder if supplied.')
 parser.add_argument('--annotation_file',type=str,default='annotation1.xlsx',help="Excel file with segmentation settings for channels. Make it with coco_make_annotation_file.py.")
 parser.add_argument('--out_contours',type=str,default = 'stats/contours_stats', help='Output folder for stats about contours')
 parser.add_argument('--out_rois',type=str,default = 'stats/rois_stats', help='Output folder for stats about 3d rois')
@@ -13,7 +14,7 @@ parser.add_argument('--out_graphical',type=str,default = 'graphical/graphic_segm
 parser.add_argument('--temp_folder',type=str,default='raw/temp',help="temp folder for storing temporary files.")
 parser.add_argument('--extracted_images_folder',type=str,default='raw/extracted_raw',help="Folder with extracted images.")
 parser.add_argument('--stitch',default=False,action="store_true",help='Switch that turns on stitching of images using ImageJ. NB! Very experimental')
-parser.add_argument('--cores',type=int,help='Number of cores to use. Default is number of cores minus 1.')
+parser.add_argument('--cores',type=int,default=1,help='Number of cores to use. Default is 1. -1 = number of cores -1')
 parser.add_argument('--n_process',type=int,help='Process the n first alphabetically sorted files')
 parser.add_argument('--debug',action='store_true',default=False,help='Run in verbose mode and with one core for debugging')
 parser.add_argument('--verbose',action='store_true',default=False,help='Verbose mode')
@@ -57,13 +58,15 @@ os.makedirs(args.extracted_images_folder,exist_ok = True)
 pickle_folder = os.path.join(args.temp_folder,"segment_pickles")
 os.makedirs(pickle_folder,exist_ok=True)
 
-raw_imgs = []
-for i in os.listdir(args.raw_data): 
-    raw_path = os.path.join(args.raw_data,i)
-    img_i = classes.Image_info(raw_path,args.temp_folder,args.extracted_images_folder,pickle_folder)
-    raw_imgs.append(img_i)
-
-raw_imgs.sort()
+if args.raw_file is None: 
+    raw_imgs = []
+    for i in os.listdir(args.raw_folder): 
+        raw_path = os.path.join(args.raw_folder,i)
+        img_i = classes.Image_info(raw_path,args.temp_folder,args.extracted_images_folder,pickle_folder)
+        raw_imgs.append(img_i)
+    raw_imgs.sort()
+else: 
+    raw_imgs = [args.raw_file]
 
 if not args.n_process is None:
     raw_imgs = raw_imgs[0:args.n_process]
@@ -153,20 +156,18 @@ def main(image_info,segment_settings,info):
             z.to_pdf()
     return None
 
-if args.cores is None:
-    cores = mp.cpu_count()-1
-else:
-    cores = args.cores
+if args.cores is -1:
+    args.cores = mp.cpu_count()-1
 
 tot_images = len(raw_imgs)
 
 image_info = []
-if cores==1: 
+if args.cores==1: 
     for i in range(0,len(raw_imgs)):
         info = str(i+1)+"/"+str(tot_images)
         image_info.append(main(raw_imgs[i],segment_settings,info))
 else: 
-    pool = mp.Pool(cores)
+    pool = mp.Pool(args.cores)
 
     for i in range(0,len(raw_imgs)):
         info = str(i+1)+"/"+str(tot_images)
