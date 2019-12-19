@@ -1,0 +1,45 @@
+# This is the general Snakefile for running the analysis. The Snakefile instructs snakemake on how to perform the analysis, see https://snakemake.readthedocs.io/en/stable/
+# Copy this file to the directory with the analysis and run "snakemake",
+# or use "snakemake_cluster_cmd.txt" to utilize cluster functionality
+# This file must only be seen as a guideline as it will need modification to use with your setup 
+
+import datetime
+import os
+import shutil
+
+localrules: all
+
+start_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    
+wildcards = glob_wildcards("raw/rawdata/{sample}.czi")
+
+########################################################################
+# Rules
+########################################################################
+
+runtime_thresh = 2
+onsuccess: 
+    cmd = "email_endstatus.py --start_time \"{st}\" --runtime_thresh {rt} --endstate Success".format(st=start_time,rt = runtime_thresh)
+    shell(cmd)
+
+onerror: 
+    cmd = "email_endstatus.py --start_time \"{st}\" --runtime_thresh {rt} --endstate Error".format(st=start_time,rt = runtime_thresh)
+    shell(cmd)
+    
+rule all: 
+    #Tell snakemake which files it shall create
+    input:
+        expand("stats/rois_stats/{sample}.csv",sample = wildcards.sample)
+    
+rule coco_segment: 
+    input: 
+        "raw/rawdata/{sample}.czi"
+    output: 
+        "stats/rois_stats/{sample}.csv"
+    params: 
+        mem = "15G",
+        runtime = "0:30:0"
+    log: 
+        {"logs/coco_segment/{sample}.txt"}
+    shell: 
+        "coco_segment.py --debug --raw_file {input} &> {log}"
