@@ -19,4 +19,3 @@ To make get imagej to open files windowless:
 1. Open FIJI2. Navigate to Plugins > Bio-Formats > Bio-Formats Plugins Configuration
 3. Select Formats
 4. Select your desired file format (e.g. “Zeiss CZI”) and select “Windowless”
-5. Close the Bio-Formats Plugins Configuration window Now the importer window won’t open for this file-type.
