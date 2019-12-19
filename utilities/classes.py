@@ -1179,7 +1179,7 @@ class Channel:
         cmd = "tiffcomment {image} > {xml}".format(image = self.full_path,xml = xml_path)
         exit_code = os.system(cmd)
         if exit_code != 0:
-            raise ValueError("Command did not exit properly"+cmd)
+            raise ValueError("Command did not exit properly: "+cmd)
         
         with open(xml_path) as f: 
             xml = f.read()

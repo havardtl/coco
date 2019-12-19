@@ -66,7 +66,8 @@ if args.raw_file is None:
         raw_imgs.append(img_i)
     raw_imgs.sort()
 else: 
-    raw_imgs = [args.raw_file]
+    raw_imgs = [classes.Image_info(args.raw_file,args.temp_folder,args.extracted_images_folder,pickle_folder)]
+    args.cores = 1
 
 if not args.n_process is None:
     raw_imgs = raw_imgs[0:args.n_process]
