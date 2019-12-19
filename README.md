@@ -15,7 +15,7 @@ Confocal counter (coco) that extracts information about objects from confocal im
 ## dependencies
 conda install cv2 pandas openpyxl xlrd reportlab
 
-To make get imagej to open files windowless: 
+To get imagej to open files windowless: 
 1. Open FIJI2. Navigate to Plugins > Bio-Formats > Bio-Formats Plugins Configuration
 3. Select Formats
 4. Select your desired file format (e.g. “Zeiss CZI”) and select “Windowless”
