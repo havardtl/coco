@@ -12,5 +12,11 @@ Confocal counter (coco) that extracts information about objects from confocal im
 - Add log file for each run so that you know settings used to segment. (git log -1 --format="%H" gives commit hash)
 
 
-#dependencies
+## dependencies
 conda install cv2 pandas openpyxl xlrd reportlab
+
+To make get imagej to open files windowless: 
+1. Open FIJI2. Navigate to Plugins > Bio-Formats > Bio-Formats Plugins Configuration
+3. Select Formats
+4. Select your desired file format (e.g. “Zeiss CZI”) and select “Windowless”
+5. Close the Bio-Formats Plugins Configuration window Now the importer window won’t open for this file-type.
