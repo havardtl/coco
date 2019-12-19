@@ -127,8 +127,7 @@ def main(image_info,segment_settings,info):
                     os.remove(image_info.pickle_path)
                     print("Could not write pickle object")
         else: 
-            if args.verbose:
-                print("Reading z_stacks info from pickle file: "+image_info.pickle_path)
+            if args.verbose: print("Reading z_stacks info from pickle file: "+image_info.pickle_path)
             with open(image_info.pickle_path, 'rb') as handle:
                 z_stacks = pickle.load(handle)
         
@@ -139,9 +138,11 @@ def main(image_info,segment_settings,info):
                 rois_3d.append(roi)
         
         df_rois = pd.DataFrame()
-        for roi in rois_3d: 
-            roi.build()
-            df_rois = df_rois.append(roi.data,ignore_index=True,sort=False)
+        if args.verbose: print("Building 3D rois")
+        for i in range(len(rois_3d)): 
+            if args.verbose: oi.print_percentage(i,len(rois_3d),10)
+            rois_3d[i].build()
+            df_rois = df_rois.append(rois_3d[i].data,ignore_index=True,sort=False)
         
         if args.verbose: 
             print("Writing df_rois to path: "+df_rois_path)

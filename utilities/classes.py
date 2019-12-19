@@ -423,27 +423,33 @@ class Zstack:
         Returns 
         rois_3d : list of Roi_3d : All Roi_3d objects 
         '''
-        if VERBOSE: print("Generating roi_3ds for all images in z_stack "+str(self))
+        if VERBOSE: print("Adding roi_3d_id for all images in z_stack "+str(self))
 
-        for i in self.images: 
+        for i in self.images:
+            if VERBOSE: print(i.z_index,end="  ",flush=True)
             for k in i.combined_mask.contours: 
                 k.add_roi_id()
             for j in i.channels: 
                 for k in j.contours: 
                     k.add_roi_id()
         
+        if VERBOSE: print("\nMaking combined 3D rois")
         combined_rois = []
         for i in self.images:
+            if VERBOSE: print(i.z_index,end="  ",flush=True)
             for k in i.combined_mask.contours:
                 k.add_to_roi_list(combined_rois,self,i.combined_mask.channel_index)
         
+        if VERBOSE: print("\nMaking channel 3D rois")
         rois_3d = []
         for i in self.images: 
+            if VERBOSE: print(i.z_index,end="  ",flush=True)
             for j in i.channels: 
                 channel_index = j.channel_index
                 for k in j.contours: 
                     k.add_to_roi_list(rois_3d,self,channel_index)
         
+        if VERBOSE: print("\nFinding wich roi is inside combined rois")
         for i in rois_3d:
             i.is_inside_combined_roi(combined_rois)
         
@@ -619,6 +625,7 @@ class Zstack:
         image_vars = ["file_id"]
         data = None
         for i in self.images: 
+            if VERBOSE: print(i.z_index,end="  ",flush=True)
             z_index = i.z_index
             for j in i.channels:
                 channel_id = j.id_channel 
@@ -659,8 +666,6 @@ class Zstack:
         save_path = os.path.join(GRAPHICAL_SEGMENTATION_FOLDER,self.id_z_stack+".pdf")
         pdf = Pdf(save_path,pdf_imgs)
         pdf.make_pdf()
-
-        return None
 
     def __repr__(self):
         string = "{class_str} stack_id: {class_id} with n images: {n}".format(class_str = self.__class__.__name__,class_id = self.id_z_stack,n = len(self.images))
@@ -1426,13 +1431,14 @@ class Contour:
         self.data = data 
         return None        
             
-    def is_overlapping(self,other_channel,overlap_thresh):
+    def is_overlapping(self,other_channel,overlap_thresh,assume_overlap_thresh=36):
         '''
         Find all contours in other channel that are overlapping with this contour 
         
         Params
         other_channel  : Channel : Channel to check if it has any contours that this one is inside
         overlap_thresh : int     : The lowest number of overlapping pixels that are required for adding as overlapping 
+        assume_overlap_thresh : int : For a small object the difference in overlap between its bounding box and actual are is so small that we can assume overlap and not check it
         
         Returns 
         overlapping    : list of Contour : Contours in other channel that is overlapping 
@@ -1441,17 +1447,18 @@ class Contour:
         other_contours = other_channel.get_group_contours(self.group_name)
         for other_contour in other_contours: 
             overlaps = self.contour_box.overlaps(other_contour.contour_box)
-            if self.contour_box.get_area() < 36: # box is small, assuming overlap
-                overlapping.append(other_contour) 
             if overlaps: 
-                other_contour_mask = np.zeros(self.contour_box.get_height_and_width(),dtype="uint8")
-                new_points = other_contour.points_new_origo(self.contour_box.top_left)
-                cv2.drawContours(other_contour_mask,[new_points],-1,255,-1)
+                if self.contour_box.get_area() < assume_overlap_thresh:
+                    overlapping.append(other_contour) 
+                else: 
+                    other_contour_mask = np.zeros(self.contour_box.get_height_and_width(),dtype="uint8")
+                    new_points = other_contour.points_new_origo(self.contour_box.top_left)
+                    cv2.drawContours(other_contour_mask,[new_points],-1,255,-1)
                 
-                this_contour_mask = self.get_contour_mask()
-                overlap_img = cv2.bitwise_and(other_contour_mask,this_contour_mask)
-                if overlap_img.sum()>overlap_thresh:
-                    overlapping.append(other_contour)
+                    this_contour_mask = self.get_contour_mask()
+                    overlap_img = cv2.bitwise_and(other_contour_mask,this_contour_mask)
+                    if overlap_img.sum()>overlap_thresh:
+                        overlapping.append(other_contour)
        
         return overlapping
         
@@ -1485,19 +1492,32 @@ class Contour:
         '''
         Loop through all contours that are z_overlapping and give them the same roi_3d_id
         '''
-        if self.roi_3d_id is not None: 
-            return None
+        if self.roi_3d_id is None: 
+            global roi3d_id_counter
+            this_roi_id = roi3d_id_counter
+            roi3d_id_counter = roi3d_id_counter + 1
+            
+            try: 
+                self.set_roi_3d_id_all_z_overlapping(this_roi_id)
+            except RecursionError: 
+                print("Recursion Error: Could not set roi_3d_id for all overlapping with: "+str(self))
+                
+    def set_roi_3d_id_all_z_overlapping(self,roi_3d_id):
+        '''
+        Look through the contours recursively and set contour id to all contours that are overlapping in z
 
-        all_z_overlapping = []
-        all_z_overlapping = self.get_all_z_overlapping(all_z_overlapping)
-       
-        global roi3d_id_counter
-        this_roi_id = roi3d_id_counter
-        roi3d_id_counter = roi3d_id_counter + 1
-
-        for i in all_z_overlapping:
-            assert i.roi_3d_id is None,"Trying to add a roi_3d_id that already exists"
-            i.roi_3d_id = this_roi_id 
+        Params
+        roi_3d_id : int : roi_3d_id to add to z_overlapping 
+        '''
+        if self.roi_3d_id is None:
+            self.roi_3d_id = roi_3d_id
+            
+            for z in self.next_z_overlapping:
+                z.set_roi_3d_id_all_z_overlapping(roi_3d_id)
+            
+            for z in self.prev_z_overlapping: 
+                z.set_roi_3d_id_all_z_overlapping(roi_3d_id) 
+        
 
     def get_all_z_overlapping(self,all_z_overlapping):
         '''
@@ -1569,7 +1589,7 @@ class Contour_groups:
         Location groups for contours in image. Each contour gets a Contour_group that is the closest to its location. 
 
         img_dim : tuple of int : Dimensions of image (y,x)
-        n_div   : int          : Number of 
+        n_div   : int          : Number of groups to divide it into
         '''
         self.img_dim = img_dim 
 
@@ -1577,8 +1597,15 @@ class Contour_groups:
 
         self.n_y = int(np.sqrt(n_div*ratio))#n_div = x*y, x = y/ratio, solving for y
         self.n_x = int(self.n_y/ratio)
+        
+        if self.n_y<1: 
+            self.n_y = 1
+        if self.n_x<1: 
+            self.n_x = 1
 
         self.n_tot = self.n_y * self.n_x
+        
+        #print("img_dim: {dim},n_div: {n_div},n_y: {ny}, n_x: {nx}, ntot: {tot}".format(dim = self.img_dim,n_div=n_div,ny=self.n_y,nx=self.n_x,tot=self.n_tot))
         
         self.y_step = self.img_dim[0]/self.n_y 
         self.x_step = self.img_dim[1]/self.n_x 
@@ -1715,14 +1742,15 @@ class Roi_3d:
         Params
         combined_rois : list of Roi_3d : List of contours to check whether these contours are inside         
         '''
-        is_inside_roi = []
+        is_inside_roi = [] 
         for c in self.contours:
             for c_i in c.is_inside:
-
-                for cr in combined_rois:
-                    for crc in cr.contours:
-                        if c_i.id_contour == crc.id_contour:
-                            is_inside_roi.append(cr.id_roi_3d)
+                is_inside_roi.append(c_i.roi_3d_id)
+                #for cr in combined_rois:
+                #    for crc in cr.contours:
+                #        if c_i.id_contour == crc.id_contour:
+                #            is_inside_roi.append(cr.id_roi_3d)
+                #TODO: verify that this actually works
         is_inside_roi = list(set(is_inside_roi))
         self.is_inside_roi = is_inside_roi
 
@@ -2008,7 +2036,7 @@ class Image_in_pdf:
         
         img_ratio = float(self.img_dim[1])/float(self.img_dim[0])
         if not ((self.goal_ratio - 0.01) < img_ratio < (self.goal_ratio + 0.01)):
-            if VERBOSE: print("Changing ratio")
+            #if VERBOSE: print("Changing ratio")
             self.changed_image = True
             
             if img_ratio < self.goal_ratio:
@@ -2164,8 +2192,7 @@ class Pdf:
         annotate_box_width : int : Height of annotation box in same direction as text
         '''
         
-        if VERBOSE: 
-            print("Saving PDF to: "+self.save_path)
+        if VERBOSE: print("Saving PDF to: "+self.save_path)
 
         from reportlab.lib.pagesizes import A4
         from reportlab.pdfgen.canvas import Canvas

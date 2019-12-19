@@ -9,6 +9,22 @@ import cv2
 import utilities.classes as classes 
 
 IMG_FILE_ENDING = ".ome.tiff"
+
+def print_percentage(i,tot,mod): 
+    '''
+    Print progress thorugh a for loop 
+    
+    i    : int : current i
+    tot  : int : Maximal i-value
+    mod  : int : How much difference is needed before printing
+    '''
+    step = (1/tot)*100 
+    step = step * 0.99
+    percent = (i/tot)*100
+    if (percent % mod) < step: 
+        print("{:.1f}%".format(percent),end="  ",flush=True)
+    if i == (tot-1): 
+        print("100%")
     
 def excel_to_segment_settings(excel_path): 
     '''
