@@ -9,5 +9,13 @@ Confocal counter (coco) that extracts information about objects from confocal im
 - Write a good readme
 - Add output with projection and each object number
 - Add possibility to add manual annotation of organoids and other annotations
-- Reduce amount of repeated code in each file run in command line
 - Add log file for each run so that you know settings used to segment. (git log -1 --format="%H" gives commit hash)
+
+
+## dependencies
+conda install opencv pandas openpyxl xlrd reportlab
+
+To get imagej to open files windowless: 
+1. Open FIJI2. Navigate to Plugins > Bio-Formats > Bio-Formats Plugins Configuration
+3. Select Formats
+4. Select your desired file format (e.g. “Zeiss CZI”) and select “Windowless”
