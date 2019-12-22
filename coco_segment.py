@@ -162,6 +162,7 @@ if args.cores is -1:
 
 tot_images = len(raw_imgs)
 
+#TODO: image_info here is different from the one above, rename variable to something unique
 image_info = []
 if args.cores==1: 
     for i in range(0,len(raw_imgs)):
