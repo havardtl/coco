@@ -293,10 +293,17 @@ def plot_images_pdf(save_folder,df,file_vars,x_vars,y_vars,image_vars,image_dim,
         df["file_vars"] = df["file_vars"] + sep + temp
         sep="_"
     
+    if len(x_vars)==0: 
+        x_vars = ["x"]
+        df["x"]="None"
+        sort_ascending = sort_ascending.append(True)
     df["x_vars"] = ""
     for i in x_vars: 
         temp = df[i].astype(str).str.replace("_","")
         df["x_vars"] = df["x_vars"] +"_"+ temp
+    
+    if len(y_vars)==0:
+        raise ValueErorr("y_vars must be longer than zero")
     
     df["y_vars"] = ""
     for i in y_vars: 

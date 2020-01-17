@@ -4,6 +4,7 @@ import math
 import numpy as np
 import pandas as pd
 import cv2
+from io import StringIO 
 
 sys.setrecursionlimit(10**6) 
 
@@ -30,6 +31,29 @@ IMG_FILE_ENDING = ".ome.tiff"
 contour_id_counter = 0
 roi3d_id_counter = 0
 contour_chain_counter = 0
+
+#####################################
+# Functions
+#####################################
+
+def set_zipped_list(a,b): 
+    '''
+    Get set of two list that are linked together
+
+    Params
+    a : list : list a
+    b : list : list b
+    '''
+    a_set = []
+    b_set = []
+    for a_i,b_i in set(zip(a,b)): 
+        a_set.append(a_i)
+        b_set.append(b_i)
+    return a_set,b_set
+
+###############################################
+# Classes
+###############################################
 
 class Image_info:
 
@@ -338,10 +362,44 @@ class Zstack:
         self.composite = None
 
         self.made_combined_masks = False
-        
+
+    def add_annotations(self,annotations):
+        '''
+        Add annotations to channels
+
+        Params
+        annotations : list of Annotation : Annotation objects to check if can be added to z_stack 
+        '''
+        this_z_stack = []
+        for a in annotations: 
+            if self.id_z_stack in a.file_id: 
+                this_z_stack.append(a)
+        if VERBOSE: print("Annotations found for this z_stack: "+str(len(this_z_stack)))
+       
+        for i in self.images: 
+            for j in i.channels: 
+                j.add_annotation(this_z_stack)
+            i.combined_mask.add_annotation(this_z_stack)
+
+    def check_annotations(self):
+        '''
+        Check whether contour objects have annotational objects inside
+
+        Params
+        annotation_paths : list of str : Path to annotation files to add to channels 
+        '''
+        if VERBOSE: print("Checking if contours have annotations inside in "+str(self))
+        for i in self.images: 
+            if VERBOSE: print(i.z_index,end="  ",flush=True)
+            for j in i.channels: 
+                j.check_annotation()
+            i.combined_mask.check_annotation(other_channel = True)
+
+        if VERBOSE: print("")
+
     def make_masks(self):
         #Generate masks in all Images objects
-        if VERBOSE: print("Making masks for all images in z_stack "+str(self))
+        if VERBOSE: print("Making masks for all images in "+str(self))
         
         for i in self.images:
             if VERBOSE: print(i.z_index,end="  ",flush=True)
@@ -351,7 +409,7 @@ class Zstack:
         
     def make_combined_masks(self):
         #Combine all masks into one to make a super object that other contours can be checked if they are inside
-        if VERBOSE: print("Making combined channels for all images in z_stack "+str(self))
+        if VERBOSE: print("Making combined channels for all images in "+str(self))
 
         for i in self.images:
             if VERBOSE: print(i.z_index,end="  ",flush=True)
@@ -362,7 +420,7 @@ class Zstack:
 
     def find_contours(self): 
         #Find contours in all Images objects
-        if VERBOSE: print("Finding contours all images in z_stack "+str(self))
+        if VERBOSE: print("Finding contours all images in "+str(self))
         for i in self.images:
             if VERBOSE: print(i.z_index,end="  ",flush=True)
             for j in i.channels: 
@@ -388,7 +446,7 @@ class Zstack:
 
     def find_z_overlapping(self): 
         #Find all overlapping contours for all contours in images
-        if VERBOSE: print("Finding z_overlapping for all images in z_stack "+str(self))
+        if VERBOSE: print("Finding z_overlapping for all images in "+str(self))
         for i in range(len(self.images)-1):
             if VERBOSE: print(i,end="  ",flush=True)
             self.images[i].find_z_overlapping(self.images[i+1])
@@ -404,7 +462,7 @@ class Zstack:
         if VERBOSE: print("")
             
     def update_contour_stats(self):
-        if VERBOSE: print("Updating contour stats for all contours in z_stack "+str(self))
+        if VERBOSE: print("Updating contour stats for all contours in "+str(self))
         for i in self.images:
             if VERBOSE: print(i.z_index,end="  ",flush=True)
             all_channels = i.channels
@@ -423,7 +481,7 @@ class Zstack:
         Returns 
         rois_3d : list of Roi_3d : All Roi_3d objects 
         '''
-        if VERBOSE: print("Adding roi_3d_id for all images in z_stack "+str(self))
+        if VERBOSE: print("Adding roi_3d_id for all images in "+str(self))
 
         for i in self.images:
             if VERBOSE: print(i.z_index,end="  ",flush=True)
@@ -517,11 +575,12 @@ class Zstack:
 
         contours_stats_path = os.path.join(CONTOURS_STATS_FOLDER,self.id_z_stack+".csv")
         if VERBOSE: print("Wrote contours info to "+contours_stats_path)
-        df.to_csv(contours_stats_path)
+        df.to_csv(contours_stats_path,sep=";")
     
     def make_projections(self,max_projection = True,auto_max=True,colorize = True,add_scale_bar = True):
         '''
         Make projections from z_planes by finding the minimal or maximal value in the z-axis
+        
         Params 
         z_planes        : list : a list of paths to each plane in a stack of z_planes
         max_projection  : bool : Use maximal projection, false gives minimal projection
@@ -551,7 +610,7 @@ class Zstack:
                             projections[p].image = np.minimum(projections[p].get_image(),j.get_image())
                 
                 if make_new_channel: 
-                    new_channel_path = os.path.join(PROJECTIONS_RAW_FOLDER,self.id_z_stack+"_C"+str(j.channel_index)+".png")
+                    new_channel_path = os.path.join(PROJECTIONS_RAW_FOLDER,self.id_z_stack+"_"+str(j.id_channel)+".png")
                     open(new_channel_path, 'a').close() #Create file temporarily, we will write it out properly after making the proper projection 
                     new_channel = Channel(new_channel_path,j.channel_index,None,j.color)
                     new_channel.image = j.get_image().copy()
@@ -576,9 +635,10 @@ class Zstack:
             else: 
                 composite_img = cv2.add(composite_img,p.get_image()) 
         
-        new_channel_path = os.path.join(PROJECTIONS_RAW_FOLDER,self.id_z_stack+"_Ccomp"+".png")
+        new_channel_path = os.path.join(PROJECTIONS_RAW_FOLDER,self.id_z_stack+"_Ccomp.png")
         cv2.imwrite(new_channel_path,composite_img)
         composite = Channel(new_channel_path,max_channel_index + 1,None,None)
+        composite.id_channel = "comb"
         composite.image = composite_img
                 
         self.composite = composite
@@ -616,8 +676,13 @@ class Zstack:
         if VERBOSE: print("Making PDF from z_stack "+self.id_z_stack) 
         processed_folder = os.path.join(TEMP_FOLDER,"z_stack_processed",self.id_z_stack)
         os.makedirs(processed_folder,exist_ok=True)
+        
 
         pdf_imgs = []
+        pdf_imgs_channel = []
+        for i in range(len(self.images[0].channels)+1): 
+            pdf_imgs.append([])
+            pdf_imgs_channel.append(None)
         x = 0
         y = 0
         x_vars = ["channel_id","type","auto_max"]
@@ -636,36 +701,42 @@ class Zstack:
                 img_view = j.get_img_for_viewing(scale_bar=True,auto_max=False,colorize=True)
                 cv2.imwrite(img_for_viewing_path,img_view)
 
+                x = 0
                 data["type"] = "original"
                 data["auto_max"] = False 
-                pdf_imgs.append(Image_in_pdf(x,y,img_for_viewing_path,data.copy(),x_vars,y_vars,image_vars,processed_folder,self.img_dim))
-                x = x + 1
+                pdf_imgs[j.channel_index+1].append(Image_in_pdf(x,y,img_for_viewing_path,data.copy(),x_vars,y_vars,image_vars,processed_folder,self.img_dim))
                 
+                x = 1
                 data["type"] = "w_contours"
                 data["auto_max"] = True
                 j.make_img_with_contours(self.img_w_contour_folder,scale_bar = True,auto_max = True,colorize=True)
-                pdf_imgs.append(Image_in_pdf(x,y,j.img_w_contour_path,data.copy(),x_vars,y_vars,image_vars,processed_folder,self.img_dim))
-                x = x + 1
-            
+                pdf_imgs[j.channel_index+1].append(Image_in_pdf(x,y,j.img_w_contour_path,data.copy(),x_vars,y_vars,image_vars,processed_folder,self.img_dim))
+                
+                pdf_imgs_channel[j.channel_index+1] = j.id_channel
+
+            x = 0
             data["file_id"] = i.combined_mask.file_id
             data["type"] = "combined_mask"
             data["auto_max"] = None
             data["channel_id"] = -1
-            pdf_imgs.append(Image_in_pdf(x,y,i.combined_mask.mask_path,data.copy(),x_vars,y_vars,image_vars,processed_folder,self.img_dim))
-            x = x + 1
+            pdf_imgs[0].append(Image_in_pdf(x,y,i.combined_mask.mask_path,data.copy(),x_vars,y_vars,image_vars,processed_folder,self.img_dim))
             
+            x = 1
             data["type"] = "w_contours"
             data["auto_max"] = None
             data["channel_id"] = -1
             i.combined_mask.make_img_with_contours(self.img_w_contour_folder,scale_bar = False,auto_max=False,colorize=False)
-            pdf_imgs.append(Image_in_pdf(x,y,i.combined_mask.img_w_contour_path,data.copy(),x_vars,y_vars,image_vars,processed_folder,self.img_dim))
+            pdf_imgs[0].append(Image_in_pdf(x,y,i.combined_mask.img_w_contour_path,data.copy(),x_vars,y_vars,image_vars,processed_folder,self.img_dim))
             
-            y = y + 1
-            x = 0
+            pdf_imgs_channel[0] = i.combined_mask.id_channel
 
-        save_path = os.path.join(GRAPHICAL_SEGMENTATION_FOLDER,self.id_z_stack+".pdf")
-        pdf = Pdf(save_path,pdf_imgs)
-        pdf.make_pdf()
+            y = y + 1
+        if VERBOSE: print("")
+        
+        for i in range(len(pdf_imgs)): 
+            save_path = os.path.join(GRAPHICAL_SEGMENTATION_FOLDER,self.id_z_stack+"_"+str(pdf_imgs_channel[i])+".pdf")
+            pdf = Pdf(save_path,pdf_imgs[i])
+            pdf.make_pdf()
 
     def __repr__(self):
         string = "{class_str} stack_id: {class_id} with n images: {n}".format(class_str = self.__class__.__name__,class_id = self.id_z_stack,n = len(self.images))
@@ -736,6 +807,7 @@ class Image:
         cv2.imwrite(empty_img_path,empty_img)
         
         self.combined_mask = Channel(empty_img_path,channel_index,self.z_index,None)
+        self.combined_mask.id_channel = "Ccomb"
         self.combined_mask.mask = combined_mask
         self.combined_mask.mask_path = combined_mask_path
         return None
@@ -829,7 +901,7 @@ class Channel:
             self.file_id = self.file_id[:-4]
 
         self.channel_index = int(channel_index)
-        self.id_channel = str(channel_index)
+        self.id_channel = "C"+str(channel_index)
         self.z_index = z_index
 
         self.x_res = None
@@ -847,6 +919,9 @@ class Channel:
         self.contour_groups = None
 
         self.img_w_contour_path = None 
+
+        self.annotation_this_channel = None
+        self.annotation_other_channel = []
 
     def get_image(self):
         if self.image is not None: 
@@ -866,7 +941,39 @@ class Channel:
                 self.image = image 
             
             return image
-    
+   
+    def add_annotation(self,annotations): 
+        '''
+        Add annotational information to channel
+
+        annotations : list of Annotation : List of annotations for this z_stack  
+        '''
+        for a in annotations: 
+            if self.contour_groups is not None: 
+                a.add_contour_groups(self.contour_groups)
+            
+            if a.id_channel == self.id_channel:
+                if VERBOSE: print("\t"+"Channel: "+self.id_channel+"\tFound annotation file: "+a.file_id+"\t n_annotations: "+str(len(a.df.index)))
+                if not self.annotation_this_channel is None: 
+                    raise ValueError("Multiple annotations match file id! "+self.file_id)
+                if a.manually_reviewed: 
+                    self.annotation_this_channel = a
+            else:
+                self.annotation_other_channel.append(a)
+
+    def check_annotation(self,other_channel = False): 
+        '''
+        Check whether contours contain annotational information
+
+        Params 
+        other_channel : bool : add annotation from other channels as well  
+        '''
+        for c in self.contours: 
+            c.check_annotation(self.annotation_this_channel)
+            if other_channel: 
+                for a in self.annotation_other_channel: 
+                    c.check_annotation(a,True)
+
     def get_part_of_image(self,rectangle): 
         '''
         Return only part of image instead of the whole thing. NB! the returned value is not a copy 
@@ -922,13 +1029,19 @@ class Channel:
         img = self.get_img_for_viewing(scale_bar,auto_max,colorize).copy()
         
         contours = []
-        for i in self.contours: 
-            cv2.drawContours(img,[i.points],-1,(255,255,255),1)
+        for i in self.contours:
+            annot_str = ""
+            color = (200,200,200)
+            if len(i.annotation_this_channel_type)>0:
+                color = (255,255,255)
+                annot_str = ",".join(i.annotation_this_channel_type)  + "(" +  ",".join(i.annotation_this_channel_id) + ")"
+
+            cv2.drawContours(img,[i.points],-1,color,1)
             if i.roi_3d_id is not None:
                 x = i.data["centroid_x"]
                 y = i.data["centroid_y"]
-                cv2.putText(img,str(i.roi_3d_id),(x-4,y),cv2.FONT_HERSHEY_SIMPLEX,0.4,(255,255,255),1,cv2.LINE_AA)
-                #cv2.putText(img,str(i.id_contour),(x-4,y+10),cv2.FONT_HERSHEY_SIMPLEX,0.4,(0,255,255),1,cv2.LINE_AA) 
+                cv2.putText(img,str(i.roi_3d_id),(x-4,y),cv2.FONT_HERSHEY_SIMPLEX,0.4,color,1,cv2.LINE_AA)
+                cv2.putText(img,annot_str,(x-4,y+10),cv2.FONT_HERSHEY_SIMPLEX,0.4,color,1,cv2.LINE_AA) 
         
         img_w_contour_path = os.path.join(img_w_contour_folder,self.file_id+".png")
         cv2.imwrite(img_w_contour_path,img)
@@ -1132,7 +1245,7 @@ class Channel:
             return self.contours
         else: 
             return self.contour_groups.get_contours_in_group(group_names)
-
+    
     def find_z_overlapping(self,next_z):
         '''
         Find all contours in next z plane in same channel that overlaps with this object
@@ -1297,7 +1410,13 @@ class Contour:
 
         self.group_name = []
 
-        self.data = None#self.contour_stats()
+        self.data = None
+
+        self.manually_reviewed = False
+        self.annotation_this_channel_type = []
+        self.annotation_this_channel_id   = [] 
+        self.annotation_other_channel_type = []
+        self.annotation_other_channel_id   = [] 
     
     def get_contour_rectangle(self):
         '''
@@ -1406,6 +1525,9 @@ class Contour:
             self.data.update(data)
 
     def update_contour_stats(self):
+        '''
+        Update statistics about Contour 
+        '''
         M = cv2.moments(self.points)
         area = M['m00']
         perimeter = cv2.arcLength(self.points,True)
@@ -1425,7 +1547,12 @@ class Contour:
             "at_edge":self.is_at_edge(),
             "next_z_overlapping":self.contour_list_as_str(self.next_z_overlapping), 
             "prev_z_overlapping":self.contour_list_as_str(self.prev_z_overlapping), 
-            "is_inside":self.contour_list_as_str(self.is_inside) 
+            "is_inside":self.contour_list_as_str(self.is_inside),
+            "manually_reviewed": self.manually_reviewed,
+            "annotation_this_channel_type"  : ",".join(self.annotation_this_channel_type),
+            "annotation_this_channel_id"    : ",".join(self.annotation_this_channel_id),
+            "annotation_other_channel_type" : ",".join(self.annotation_other_channel_type),
+            "annotation_other_channel_id"   : ",".join(self.annotation_other_channel_id)
         }
         
         self.data = data 
@@ -1488,6 +1615,33 @@ class Contour:
             if not (self in i.prev_z_overlapping): 
                 i.prev_z_overlapping.append(self)
     
+    def check_annotation(self,annotation,other_channel=False):
+        '''
+        Look through annotation and add those categories that are inside object
+
+        Params
+        annotation    : Annotation : object containing annotation information 
+        other_channel : bool       : if true, checks annotation of other channels as well. 
+        '''
+        if annotation is not None: 
+            df = annotation.get_points(self.group_name)
+            self.manually_reviewed = annotation.manually_reviewed 
+            for i in df.index:
+                xy = (df.loc[i,"X"],df.loc[i,"Y"]) 
+                if self.contour_box.contains_point(xy):
+                    if cv2.pointPolygonTest(self.points,xy,False) > 0:
+                        if not other_channel: 
+                            self.annotation_this_channel_type.append(str(df.loc[i,"type"]))
+                            self.annotation_this_channel_id.append(str(df.loc[i,"object_id"]))
+                        else: 
+                            self.annotation_other_channel_type.append(str(df.loc[i,"type"]))
+                            self.annotation_other_channel_id.append(str(df.loc[i,"object_id"]))
+                            
+            if not other_channel: 
+                self.annotation_this_channel_type,self.annotation_this_channel_id = set_zipped_list(self.annotation_this_channel_type,self.annotation_this_channel_id)
+            else: 
+                self.annotation_other_channel_type,self.annotation_other_channel_id = set_zipped_list(self.annotation_other_channel_type,self.annotation_other_channel_id)
+
     def add_roi_id(self):
         '''
         Loop through all contours that are z_overlapping and give them the same roi_3d_id
@@ -1633,8 +1787,33 @@ class Contour_groups:
         
         assert len(contour.group_name) > 0,"Contour did not get a group name!"
     
-    def get_contours_in_group(self,group_names): 
-        
+    def get_contour_groups_with_point(self,xy): 
+        '''
+        Get all the names of contour_groups with this point inside 
+
+        Params
+        xy : tuple of float : point 
+
+        Returns
+        contour_names : str : The names of all contour_groups with this points inside, separated with "," 
+        '''
+        contour_groups_out = []
+        for c in self.contour_groups.keys(): 
+            if self.contour_groups[c].contains_point(xy): 
+                contour_groups_out.append(c)
+        contour_groups_out = ",".join(contour_groups_out)
+        return contour_groups_out
+
+    def get_contours_in_group(self,group_names):
+        '''
+        Return all contours that has group names 
+
+        Params 
+        group_names : str : list of group names
+
+        Returns
+        out_contours : list of Contour : contours belonging to the groups in input
+        '''
         out_contours = []
         for g in group_names: 
             out_contours = out_contours + self.contour_groups[g].contours
@@ -1688,6 +1867,10 @@ class Contour_group:
     def __init__(self,xy_center,step_xy): 
         '''
         Class that represents one position in the image. All contours that are closest to this one belongs to this group
+        
+        Params
+        xy_center : tupple of int   : x and y of abstract contour group 
+        step_xy   : tupple of float : how much +1 in xy_center represents in actual pixels 
         '''
         self.step_xy = step_xy 
 
@@ -1699,20 +1882,133 @@ class Contour_group:
 
         self.name = "x"+str(self.x)+"y"+str(self.y)
         
-        x1 = self.actual_x - (self.step_xy[0]/2) -2 
-        y1 = self.actual_y - (self.step_xy[1]/2) -2
-        x2 = self.actual_x + (self.step_xy[0]/2) +2
-        y2 = self.actual_y + (self.step_xy[1]/2) +2
+        x1 = self.actual_x - (self.step_xy[0]/2) - 2 
+        y1 = self.actual_y - (self.step_xy[1]/2) - 2
+        x2 = self.actual_x + (self.step_xy[0]/2) + 2
+        y2 = self.actual_y + (self.step_xy[1]/2) + 2
         self.rect = Rectangle([x1,y1,x2,y2])
         
         self.contours = []
     
+    def contains_point(self,xy): 
+        '''
+        Check if point is inside contour group
+
+        Params
+        xy : tuple of float : Point to check if it is inside 
+        '''
+        return self.rect.contains_point(xy) 
+
     def short_repr(self): 
         return self.name + "("+str(self.actual_x)+","+str(self.actual_y)+")"
 
     def __repr__(self):
         n_contours = len(self.contours)
         return "{class_str}: name = {name}, x={x}, y={y}, n_contours={n}".format(class_str = self.__class__.__name__,name=self.name,x=self.x,y=self.y,n = n_contours)
+
+class Annotation: 
+    def __init__(self,file_id,df,manually_reviewed): 
+        '''
+        Class containing annotation data for image
+
+        Params
+        file_id           : str          : Name of annotated file 
+        df                : pd.Dataframe : Information about annotated objects. Contains colums: ["X","Y","type"] 
+        manually_reviewed : bool         : Whether the annotation is manually reviewed or not 
+        '''
+        self.file_id = file_id 
+        self.id_channel = "C"+self.file_id.rsplit("_C",1)[1]
+        self.df = df 
+        
+        self.manually_reviewed = manually_reviewed
+        if len(self.df)<0: 
+            self.manually_reviewed = False
+        
+        self.df["object_id"] = self.id_channel + "_" + df["object_id"].astype('str') 
+        self.df["contour_groups"] = ""
+        self.contour_groups = None
+
+    def add_contour_groups(self,contour_groups):
+        '''
+        Add contour groups from channel for more efficient matching of annotations
+        '''
+        self.contour_groups = contour_groups 
+        if self.contour_groups is not None:
+            for i in self.df.index: 
+                xy = (self.df.loc[i,"X"],self.df.loc[i,"Y"])
+                self.df.loc[i,"contour_groups"] = self.contour_groups.get_contour_groups_with_point(xy) 
+    
+    @classmethod
+    def load_from_file(self,path):
+        '''
+        Create annotation object from file info
+
+        Params
+        path : str : Path to annotation file
+
+        Returns
+        annotation : Annotation : Annotation object with file information
+        '''
+        #if VERBOSE: print("\tLoading annotation file from: "+path)
+        
+        with open(path,'r') as f:
+            lines = f.readlines()
+        
+        for i in range(0,len(lines)):
+            if "--changelog--" in lines[i]:
+                changelog_line = i
+            if "--organoids--" in lines[i]: 
+                info_line = i
+                break
+
+        if "reviewed_by_human" in lines[0]:
+            if "False" in lines[0]:
+                reviewed_by_human = False
+            elif "True" in lines[0]:
+                reviewed_by_human = True
+        
+        if "next_org_id" in lines[1]:
+            next_org_id = lines[1].split("=")[1]
+            next_org_id = int(next_org_id.strip())
+
+        changelog = lines[changelog_line+1:info_line]
+        
+        annotation_raw = ""
+        for l in lines[info_line+1:]:
+            annotation_raw = annotation_raw+l
+        
+        annotation_raw = StringIO(annotation_raw)
+
+        df = pd.read_csv(annotation_raw)
+        df["object_id"] = df["org_id"]
+        df = df.loc[:,["X","Y","type","object_id"]].copy()
+        
+        #if VERBOSE: print("\tFound "+str(len(df.index))+" annotations")
+        
+        file_id = os.path.splitext(os.path.split(path)[1])[0]
+        
+        annotation = Annotation(file_id,df,reviewed_by_human)
+        
+        return annotation
+
+    def get_points(self,groups=None):
+        '''
+        Get all annotations 
+
+        Params
+        groups : list of str : If this value is passed, only returns points that belongs to the contour group with this name  
+        
+        Returns
+        df     : pd.dataframe : Dataframe with point values
+        '''
+        if groups is None or groups == []: 
+            return self.df
+        else:
+            out = [False]*len(self.df.index)
+            for group in groups:
+                temp = list(self.df['contour_groups'].str.contains(group))
+                out = [a or b for a, b in zip(out, temp)]
+            return self.df.loc[out,]
 
 class Roi_3d: 
 
@@ -1782,7 +2078,12 @@ class Roi_3d:
             "mean_x_pos" : None,
             "mean_y_pos" : None,
             "mean_z_index" : None, 
-            "at_edge"      : None
+            "at_edge"      : None,
+            "annotation_this_channel_type" : None,
+            "annotation_this_channel_id" : None,
+            "annotation_other_channel_type" : None,
+            "annotation_other_channel_id" : None,
+            "manually_reviewed" : None 
         }
 
         to_unit = data["x_res"] * data["y_res"] * data["z_res"]
@@ -1809,6 +2110,10 @@ class Roi_3d:
         sum_x_pos = 0
         sum_y_pos = 0
         sum_z_pos = 0
+        annotation_this_channel_type = []
+        annotation_this_channel_id = []
+        annotation_other_channel_type = []
+        annotation_other_channel_id = []
 
         for c in self.contours:
             data["volume"] = data["volume"] + (c.data["area"]*to_unit)
@@ -1843,7 +2148,25 @@ class Roi_3d:
                 data["is_inside"] = str(c.data["is_inside"])
             else:
                 data["is_inside"] = data["is_inside"] +","+str(c.data["is_inside"])
+
+            annotation_this_channel_type  = annotation_this_channel_type  + c.annotation_this_channel_type
+            annotation_this_channel_id    = annotation_this_channel_id    + c.annotation_this_channel_id 
+            annotation_other_channel_type = annotation_other_channel_type + c.annotation_other_channel_type
+            annotation_other_channel_id   = annotation_other_channel_id   + c.annotation_other_channel_id 
+
+            if data["manually_reviewed"] is None: 
+                data["manually_reviewed"] = c.manually_reviewed
+            elif not data["manually_reviewed"]: 
+                data["manually_reviewed"] = c.manually_reviewed
         
+        annotation_this_channel_type_set,  annotation_this_channel_id_set  = set_zipped_list(annotation_this_channel_type, annotation_this_channel_id )
+        annotation_other_channel_type_set, annotation_other_channel_id_set = set_zipped_list(annotation_other_channel_type,annotation_other_channel_id)
+
+        data["annotation_this_channel_type"]  = ",".join(annotation_this_channel_type_set)
+        data["annotation_this_channel_id"]    = ",".join(annotation_this_channel_id_set)
+        data["annotation_other_channel_type"] = ",".join(annotation_other_channel_type_set)
+        data["annotation_other_channel_id"]   = ",".join(annotation_other_channel_id_set)
+
         if data["n_contours"]>0:
             data["mean_x_pos"]   = sum_x_pos/data["n_contours"]
             data["mean_y_pos"]   = sum_y_pos/data["n_contours"]
@@ -1887,7 +2210,16 @@ class Rectangle:
         overlaps : bool      : True if rectangles overlap
         '''
         return not (self.top_left.y > other.bottom_right.y or self.top_left.x > other.bottom_right.x or self.bottom_right.y < other.top_left.y or self.bottom_right.x < other.top_left.x)
-   
+    
+    def contains_point(self,xy): 
+        '''
+        Check if point is inside rectangle 
+
+        Params
+        xy : tuple of float : Point to check if is inside (x,y)
+        '''
+        return (xy[0] > self.top_left.x and xy[0] < self.bottom_right.x and xy[1] > self.top_left.y and xy[1] < self.bottom_right.y)
+
     def at_edge(self,other,edge_size): 
         '''
         Check if the other rectangle is at the edge of this one
@@ -2054,7 +2386,7 @@ class Image_in_pdf:
         img_size = self.img_dim[0]*self.img_dim[1]
         
         if img_size > self.max_size: 
-            if VERBOSE: print("Shrinking to max size")
+            #if VERBOSE: print("Shrinking to max size")
             self.changed_image = True
             ratio = np.sqrt(self.max_size)/np.sqrt(img_size)
             new_dim = (int(self.img_dim[1]*ratio),  int(self.img_dim[0]*ratio))

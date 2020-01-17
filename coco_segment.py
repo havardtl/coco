@@ -7,7 +7,8 @@ import argparse
 parser = argparse.ArgumentParser(description = 'Segment objects in confocal images and extracts their information.')
 parser.add_argument('--raw_folder',default="raw/rawdata",type=str,help='Folder with all raw data. Does not look for files in sub-folders. Can use all formats accepted by your installed version of bftools.')
 parser.add_argument('--raw_file',type=str,help='Supply a single raw file to process. Ignores --raw_folder if supplied.')
-parser.add_argument('--annotation_file',type=str,default='annotation1.xlsx',help="Excel file with segmentation settings for channels. Make it with coco_make_annotation_file.py.")
+parser.add_argument('--settings_file',type=str,default='annotation1.xlsx',help="Excel file with segmentation settings for channels. Make it with coco_make_annotation_file.py.")
+parser.add_argument('--annotations',type=str,default='annotations',help="Folder with annotation of channel images")
 parser.add_argument('--out_contours',type=str,default = 'stats/contours_stats', help='Output folder for stats about contours')
 parser.add_argument('--out_rois',type=str,default = 'stats/rois_stats', help='Output folder for stats about 3d rois')
 parser.add_argument('--out_graphical',type=str,default = 'graphical/graphic_segmentation', help='Output folder for graphical representation of segmentation')
@@ -39,7 +40,7 @@ import pickle
 ##############################
 # Run program
 ##############################
-if not os.path.exists(args.annotation_file): 
+if not os.path.exists(args.settings_file): 
     cmd = "coco_make_annotation_file.py"
     exit_code = os.system(cmd)
     if exit_code != 0: 
@@ -60,7 +61,7 @@ os.makedirs(pickle_folder,exist_ok=True)
 
 if args.raw_file is None: 
     raw_imgs = []
-    for i in os.listdir(args.raw_folder): 
+    for i in ["HL30_1_d03_A03_i1_10X.czi"]: #os.listdir(args.raw_folder): 
         raw_path = os.path.join(args.raw_folder,i)
         img_i = classes.Image_info(raw_path,args.temp_folder,args.extracted_images_folder,pickle_folder)
         raw_imgs.append(img_i)
@@ -82,19 +83,27 @@ classes.TEMP_FOLDER = args.temp_folder
 classes.GRAPHICAL_SEGMENTATION_FOLDER = args.out_graphical
 
 print("Found {n_files} to process".format(n_files = len(raw_imgs)))
-segment_settings = oi.excel_to_segment_settings(args.annotation_file)
+segment_settings = oi.excel_to_segment_settings(args.settings_file)
 
 if args.stitch: 
     for image_info in raw_imgs: 
         image_info.get_extracted_files_path(extract_with_imagej=args.stitch)
 
-def main(image_info,segment_settings,info):
+annotations = []
+if os.path.exists(args.annotations): 
+    annotation_files = os.listdir(args.annotations)
+    for a in annotation_files: 
+        annotations.append(classes.Annotation.load_from_file(os.path.join(args.annotations,a)))
+    if args.verbose: print("Found "+str(len(annotations))+ " annotation files")
+
+def main(image_info,segment_settings,annotations,info):
     '''
     Process one file of the program 
 
     Params
     image_info       : Image_info               : Information about file to process
     segment_settings : list of Segment_settings : Information about how to process images
+    annotations      : list of Annotations      : Annotations of images
     info             : str                      : Info about the image that is processed to be printed
     '''
     
@@ -103,7 +112,7 @@ def main(image_info,segment_settings,info):
     
     print_str = str(info)+"\traw_img_path: "+str(image_info.raw_path)+"\t"
     
-    if os.path.exists(df_rois_path): 
+    if False: #os.path.exists(df_rois_path): 
         print(print_str+"3D ROIs already made, skipping this file")
     else:
         print(print_str+"Making 3D rois")
@@ -115,8 +124,10 @@ def main(image_info,segment_settings,info):
                 z.make_combined_masks()
                 z.find_contours()
                 z.group_contours()
+                z.add_annotations(annotations)
                 z.is_inside_combined()
                 z.find_z_overlapping()
+                z.check_annotations()
                 z.update_contour_stats()
                 z.measure_channels()
                 z.write_contour_info()
@@ -151,7 +162,7 @@ def main(image_info,segment_settings,info):
         if args.verbose: 
             print("Writing df_rois to path: "+df_rois_path)
             print(df_rois)
-        df_rois.to_csv(df_rois_path)
+        df_rois.to_csv(df_rois_path,sep=";")
         
         for z in z_stacks: 
             z.to_pdf()
@@ -162,21 +173,20 @@ if args.cores is -1:
 
 tot_images = len(raw_imgs)
 
-#TODO: image_info here is different from the one above, rename variable to something unique
-image_info = []
+out = []
 if args.cores==1: 
     for i in range(0,len(raw_imgs)):
         info = str(i+1)+"/"+str(tot_images)
-        image_info.append(main(raw_imgs[i],segment_settings,info))
+        out.append(main(raw_imgs[i],segment_settings,annotations,info))
 else: 
     pool = mp.Pool(args.cores)
 
     for i in range(0,len(raw_imgs)):
         info = str(i+1)+"/"+str(tot_images)
-        image_info.append(pool.apply_async(main,args=(raw_imgs[i],segment_settings,info)))
+        out.append(pool.apply_async(main,args=(raw_imgs[i],segment_settings,annotations,info)))
 
     pool.close()
     pool.join()
 
-    image_info = [x.get() for x in image_info]
+    out = [x.get() for x in out]
 

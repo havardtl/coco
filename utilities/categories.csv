@@ -1,0 +1,5 @@
+name,color_hex,color_human,group_numb,button,show_size
+Tuft_cell,#00BFFF,red,0,mouse_left,1
+Junk,#FFFF00,yellow,0,mouse_right,1
+Spheroid,#0000FF,blue,1,mouse_left,5
+Budding,#90EE90,green,1,mouse_right,5
