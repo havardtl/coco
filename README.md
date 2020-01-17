@@ -23,4 +23,5 @@ conda install opencv pandas openpyxl xlrd reportlab
 ### install python-bioformats
 1. sudo apt-get install openjdk-8-jdk
 2. export JAVA_HOME="/usr/lib/jvm/java-8-openjdk-amd64" (add to .bashrc)
-3. conda install python=3.5 anaconda::javabridge bioconda::bioformats
+3. conda install python=3.5 anaconda::javabridge 
+4. pip install python-bioformats
