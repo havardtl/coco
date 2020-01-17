@@ -61,7 +61,7 @@ os.makedirs(pickle_folder,exist_ok=True)
 
 if args.raw_file is None: 
     raw_imgs = []
-    for i in ["HL30_1_d03_A03_i1_10X.czi"]: #os.listdir(args.raw_folder): 
+    for i in os.listdir(args.raw_folder): 
         raw_path = os.path.join(args.raw_folder,i)
         img_i = classes.Image_info(raw_path,args.temp_folder,args.extracted_images_folder,pickle_folder)
         raw_imgs.append(img_i)
@@ -112,7 +112,7 @@ def main(image_info,segment_settings,annotations,info):
     
     print_str = str(info)+"\traw_img_path: "+str(image_info.raw_path)+"\t"
     
-    if False: #os.path.exists(df_rois_path): 
+    if os.path.exists(df_rois_path): 
         print(print_str+"3D ROIs already made, skipping this file")
     else:
         print(print_str+"Making 3D rois")
