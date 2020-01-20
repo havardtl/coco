@@ -9,6 +9,7 @@ parser.add_argument('--raw_folder',default="raw/rawdata",type=str,help='Folder w
 parser.add_argument('--raw_file',type=str,help='Supply a single raw file to process. Ignores --raw_folder if supplied.')
 parser.add_argument('--settings_file',type=str,default='annotation1.xlsx',help="Excel file with segmentation settings for channels. Make it with coco_make_annotation_file.py.")
 parser.add_argument('--annotations',type=str,default='annotations',help="Folder with annotation of channel images")
+parser.add_argument('--categories',type=str,help='File to load category information from. Default is to load it from default file in utilities/categories.csv')
 parser.add_argument('--out_contours',type=str,default = 'stats/contours_stats', help='Output folder for stats about contours')
 parser.add_argument('--out_rois',type=str,default = 'stats/rois_stats', help='Output folder for stats about 3d rois')
 parser.add_argument('--out_graphical',type=str,default = 'graphical/graphic_segmentation', help='Output folder for graphical representation of segmentation')
@@ -40,6 +41,10 @@ import pickle
 ##############################
 # Run program
 ##############################
+this_script_folder = os.path.dirname(os.path.abspath(os.path.realpath(__file__)))
+if args.categories is None: 
+    args.categories = os.path.join(this_script_folder,"utilities","categories.csv")
+
 if not os.path.exists(args.settings_file): 
     cmd = "coco_make_annotation_file.py"
     exit_code = os.system(cmd)
@@ -91,9 +96,11 @@ if args.stitch:
 
 annotations = []
 if os.path.exists(args.annotations): 
+    categories = classes.Categories.load_from_file(args.categories)
+    
     annotation_files = os.listdir(args.annotations)
     for a in annotation_files: 
-        annotations.append(classes.Annotation.load_from_file(os.path.join(args.annotations,a)))
+        annotations.append(classes.Annotation.load_from_file(os.path.join(args.annotations,a),categories))
     if args.verbose: print("Found "+str(len(annotations))+ " annotation files")
 
 def main(image_info,segment_settings,annotations,info):
@@ -131,9 +138,7 @@ def main(image_info,segment_settings,annotations,info):
                 z.update_contour_stats()
                 z.measure_channels()
                 z.write_contour_info()
-                
                 if args.verbose: z.print_all()
-                
                 try: 
                     with open(image_info.pickle_path, 'wb') as handle:
                         if args.verbose: print("Writing pickle object")
@@ -147,7 +152,7 @@ def main(image_info,segment_settings,annotations,info):
                 z_stacks = pickle.load(handle)
         
         rois_3d = []
-        for z in z_stacks: 
+        for z in z_stacks:         
             temp_rois_3d = z.get_rois_3d()
             for roi in temp_rois_3d: 
                 rois_3d.append(roi)
@@ -162,7 +167,7 @@ def main(image_info,segment_settings,annotations,info):
         if args.verbose: 
             print("Writing df_rois to path: "+df_rois_path)
             print(df_rois)
-        df_rois.to_csv(df_rois_path,sep=";")
+        df_rois.to_csv(df_rois_path,sep=";",index=False)
         
         for z in z_stacks: 
             z.to_pdf()

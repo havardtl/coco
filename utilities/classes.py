@@ -1,3 +1,5 @@
+# TODO: Multiple is_inside_roi is registered. why?
+# TODO: Manual_reviewed is always false for combined channels?
 import sys 
 import os
 import math
@@ -575,7 +577,7 @@ class Zstack:
 
         contours_stats_path = os.path.join(CONTOURS_STATS_FOLDER,self.id_z_stack+".csv")
         if VERBOSE: print("Wrote contours info to "+contours_stats_path)
-        df.to_csv(contours_stats_path,sep=";")
+        df.to_csv(contours_stats_path,sep=";",index=False)
     
     def make_projections(self,max_projection = True,auto_max=True,colorize = True,add_scale_bar = True):
         '''
@@ -612,7 +614,7 @@ class Zstack:
                 if make_new_channel: 
                     new_channel_path = os.path.join(PROJECTIONS_RAW_FOLDER,self.id_z_stack+"_"+str(j.id_channel)+".png")
                     open(new_channel_path, 'a').close() #Create file temporarily, we will write it out properly after making the proper projection 
-                    new_channel = Channel(new_channel_path,j.channel_index,None,j.color)
+                    new_channel = Channel(new_channel_path,j.channel_index,0,j.color)
                     new_channel.image = j.get_image().copy()
                     projections.append(new_channel)
         
@@ -637,7 +639,7 @@ class Zstack:
         
         new_channel_path = os.path.join(PROJECTIONS_RAW_FOLDER,self.id_z_stack+"_Ccomp.png")
         cv2.imwrite(new_channel_path,composite_img)
-        composite = Channel(new_channel_path,max_channel_index + 1,None,None)
+        composite = Channel(new_channel_path,max_channel_index + 1,0,(255,255,255))
         composite.id_channel = "comb"
         composite.image = composite_img
                 
@@ -709,7 +711,7 @@ class Zstack:
                 x = 1
                 data["type"] = "w_contours"
                 data["auto_max"] = True
-                j.make_img_with_contours(self.img_w_contour_folder,scale_bar = True,auto_max = True,colorize=True)
+                j.make_img_with_contours(self.img_w_contour_folder,scale_bar = True,auto_max = True,colorize=True,add_annotation=True)
                 pdf_imgs[j.channel_index+1].append(Image_in_pdf(x,y,j.img_w_contour_path,data.copy(),x_vars,y_vars,image_vars,processed_folder,self.img_dim))
                 
                 pdf_imgs_channel[j.channel_index+1] = j.id_channel
@@ -725,7 +727,7 @@ class Zstack:
             data["type"] = "w_contours"
             data["auto_max"] = None
             data["channel_id"] = -1
-            i.combined_mask.make_img_with_contours(self.img_w_contour_folder,scale_bar = False,auto_max=False,colorize=False)
+            i.combined_mask.make_img_with_contours(self.img_w_contour_folder,scale_bar = False,auto_max=False,colorize=True,add_annotation=True)
             pdf_imgs[0].append(Image_in_pdf(x,y,i.combined_mask.img_w_contour_path,data.copy(),x_vars,y_vars,image_vars,processed_folder,self.img_dim))
             
             pdf_imgs_channel[0] = i.combined_mask.id_channel
@@ -806,7 +808,7 @@ class Image:
         empty_img_path = os.path.join(combined_mask_folder,z_stack_name+"_"+str(self.z_index)+"_"+str(channel_index)+".png")
         cv2.imwrite(empty_img_path,empty_img)
         
-        self.combined_mask = Channel(empty_img_path,channel_index,self.z_index,None)
+        self.combined_mask = Channel(empty_img_path,channel_index,self.z_index,(255,255,255))
         self.combined_mask.id_channel = "Ccomb"
         self.combined_mask.mask = combined_mask
         self.combined_mask.mask_path = combined_mask_path
@@ -919,7 +921,8 @@ class Channel:
         self.contour_groups = None
 
         self.img_w_contour_path = None 
-
+        
+        self.annotation = None
         self.annotation_this_channel = None
         self.annotation_other_channel = []
 
@@ -953,6 +956,7 @@ class Channel:
                 a.add_contour_groups(self.contour_groups)
             
             if a.id_channel == self.id_channel:
+                self.annotation = a
                 if VERBOSE: print("\t"+"Channel: "+self.id_channel+"\tFound annotation file: "+a.file_id+"\t n_annotations: "+str(len(a.df.index)))
                 if not self.annotation_this_channel is None: 
                     raise ValueError("Multiple annotations match file id! "+self.file_id)
@@ -1016,7 +1020,7 @@ class Channel:
         
         return img
     
-    def make_img_with_contours(self,img_w_contour_folder,scale_bar,auto_max,colorize):
+    def make_img_with_contours(self,img_w_contour_folder,scale_bar,auto_max,colorize,add_annotation=False):
         '''
         Make a version of the image with contours and the roi_3d_id if that one exists
 
@@ -1025,24 +1029,34 @@ class Channel:
         scale_bar            : bool : add scale bar to image
         auto_max             : bool : auto_max image
         colorize             : bool : Convert from grayscale to channel specific color
+        add_annotation       : bool : Add annotational information
         '''
         img = self.get_img_for_viewing(scale_bar,auto_max,colorize).copy()
         
         contours = []
         for i in self.contours:
-            annot_str = ""
-            color = (200,200,200)
-            if len(i.annotation_this_channel_type)>0:
-                color = (255,255,255)
-                annot_str = ",".join(i.annotation_this_channel_type)  + "(" +  ",".join(i.annotation_this_channel_id) + ")"
+            color = (255,255,255)
 
             cv2.drawContours(img,[i.points],-1,color,1)
             if i.roi_3d_id is not None:
                 x = i.data["centroid_x"]
                 y = i.data["centroid_y"]
                 cv2.putText(img,str(i.roi_3d_id),(x-4,y),cv2.FONT_HERSHEY_SIMPLEX,0.4,color,1,cv2.LINE_AA)
-                cv2.putText(img,annot_str,(x-4,y+10),cv2.FONT_HERSHEY_SIMPLEX,0.4,color,1,cv2.LINE_AA) 
         
+        if add_annotation: 
+            names,colors = self.annotation.categories.get_info_text_img()
+            for i in range(len(names)):
+                #print("name: {n}, col: {c}, x = {x}, y = {y}".format(n=names[i],c=colors[i],x=0,y=25*i+50))
+                cv2.putText(img,names[i],(0,25*i+50),cv2.FONT_HERSHEY_SIMPLEX,1,colors[i],1,cv2.LINE_AA) 
+            
+            df = self.annotation.df 
+            if i in df.index:
+                name = df.loc[i,"type"]
+                xy = (int(df.loc[i,"X"]),int(df.loc[i,"Y"]))
+                color = self.annotation.categories.get_color(name,return_type = "rgb")
+                cv2.circle(img,xy,3,color=(255,255,255),thickness=-1)
+                cv2.circle(img,xy,2,color=color,thickness=-1)
+
         img_w_contour_path = os.path.join(img_w_contour_folder,self.file_id+".png")
         cv2.imwrite(img_w_contour_path,img)
         
@@ -1597,7 +1611,11 @@ class Contour:
         '''
         if self.is_inside is not None: 
             raise ValueError("Contour.is_inside is already set. Did you run Contour.is_inside twice ? ")
-        self.is_inside = self.is_overlapping(combined_mask,overlap_thresh=1) 
+        self.is_inside = self.is_overlapping(combined_mask,overlap_thresh=1,assume_overlap_thresh=0)
+        if len(self.is_inside)>1: 
+            print("Contour: "+str(self))
+            print("is inside: "+str(self.is_inside))
+            raise RuntimeError("Contour is inside multiple objects in combined mask. That should not be possible. len(self.is_inside) = "+str(len(self.is_inside)))
 
     def find_z_overlapping(self,next_z): 
         '''
@@ -1671,7 +1689,9 @@ class Contour:
             
             for z in self.prev_z_overlapping: 
                 z.set_roi_3d_id_all_z_overlapping(roi_3d_id) 
-        
+        else: 
+            if not self.roi_3d_id == roi_3d_id: 
+                raise ValueError("Trying to set roi_3d_id = "+str(roi_3d_id)+", but it is already set: self.roi_3d_id = "+str(self.roi_3d_id))
 
     def get_all_z_overlapping(self,all_z_overlapping):
         '''
@@ -1818,7 +1838,7 @@ class Contour_groups:
         for g in group_names: 
             out_contours = out_contours + self.contour_groups[g].contours
         
-        return out_contours
+        return set(out_contours)
 
     def print_matrix(self,terminal_width = 120):
         '''
@@ -1906,8 +1926,189 @@ class Contour_group:
         n_contours = len(self.contours)
         return "{class_str}: name = {name}, x={x}, y={y}, n_contours={n}".format(class_str = self.__class__.__name__,name=self.name,x=self.x,y=self.y,n = n_contours)
 
+class Category():
+    def __init__(self,name,color_hex,color_human,group,button,show_size):
+        '''
+        Initialize cateogory that will be annotated
+
+        Params
+        name        : str : name of cateogory
+        color_hex   : str : Hex color of category
+        color_human : str : Human name color of category
+        group       : int : Group number. Cycling between groups enables more categories than buttons
+        button      : str : Button that gives this object when pressed
+        show_size   : int : Display size multiplier of this object 
+        '''
+        self.name = name
+        self.color_hex = color_hex
+        self.color_human = color_human 
+        self.group = group 
+        self.button = button 
+        self.show_size = show_size
+        #print(self)
+        
+    def __lt__(self,other):
+        #make class sortable with .sort()
+        return self.group < other.group
+        
+    def __repr__(self): 
+        return "Category(name = {n}, color_hex = {c_he},color_human = {c_hu},group = {g},button = {b},show_size = {s})".format(n=self.name,c_he=self.color_hex,c_hu=self.color_human,g=self.group,b=self.button,s=self.show_size)
+
+class Categories(): 
+    def __init__(self,categories,current_group=0):
+        '''
+        Super objects of categories. Used to organize categories, so you can f.ex. cycling through category groups we can have more categories than buttons 
+        
+        Params
+        categories    : list of Category : All categories
+        current_group : int              : The group of categories that is currently selected
+        '''
+        self.categories = categories
+        self.current_group = current_group
+
+        self.highest_group = 0
+        for c in categories: 
+            if c.group > self.highest_group: 
+                self.highest_group = c.group 
+        
+        self.verify_unique_buttons()
+
+    @classmethod 
+    def load_from_file(self,file_path):
+        '''
+        Make Category and Categories objects from file
+
+        Params
+        file_path : str : path to csv file with info in columns: name,color,group_numb,button 
+        '''
+        df = pd.read_csv(file_path)
+        categories = []
+        for i in df.index: 
+            c = Category(df.loc[i,"name"],df.loc[i,"color_hex"],df.loc[i,"color_human"],int(df.loc[i,"group_numb"]),df.loc[i,"button"],df.loc[i,"show_size"])
+            categories.append(c)
+        
+        categories.sort()
+
+        return Categories(categories)
+    
+    def verify_unique_buttons(self):
+        #Check that no button is used in multiple groups
+        button_and_group = []
+        for c in self.categories: 
+            button_and_group.append(c.button + str(c.group))
+        button_and_group = set(button_and_group)
+        if len(self.categories) != len(button_and_group):
+            raise ValueError("The same button is used in multiple button groups. len(categories) = "+str(len(categories))+" len(button_and_group) = "+str(len(button_and_group)))
+
+    def next_group(self):
+        # Move on to next group         
+        self.current_group = self.current_group + 1
+        if self.current_group > self.highest_group: 
+            self.current_group = 0
+        
+    def get_active_group(self):
+        #Get all categories belonging to current group
+        out_categories = []
+        for c in self.categories: 
+            if c.group == self.current_group: 
+                out_categories.append(c)
+        return out_categories     
+   
+    def get_category(self,button):
+        '''
+        Get category str of current group. Return None if not defined
+        
+        Params
+        button : str : button that is pressed
+        
+        Returns
+        name      : str : name of category
+        
+        '''
+        active = self.get_active_group()
+        for c in active: 
+            if c.button == button: 
+                return c.name
+        return "None"
+    
+    def get_show_size(self,category):
+        '''
+        Get show_size of category. Return 1 if category is not defined
+        
+        Params
+        category : str : str that gives category name
+        
+        Returns
+        show_size : int : Multiplier for object size
+        '''
+        for c in self.categories: 
+            if c.name == category: 
+                return c.show_size
+        return 1
+
+    def get_info_text_img(self):
+        '''
+        Return all categories with one line per category for annotating images 
+        
+        Returns
+        out   : list of str    : One information line per object 
+        color : list of tupple : rgb color of each line
+        '''
+        out = []
+        color = []
+        for c in self.categories: 
+            temp = "  "+ c.name 
+            out.append(temp)
+            color.append(self.hex_to_bgr(c.color_hex))
+        return out,color 
+
+    def get_info_text_visual(self):
+        '''
+        Return all categories with one line per category for annotation program. 
+        
+        Returns
+        out   : str   : One information line per object 
+        '''
+        out = ""
+        for c in self.categories: 
+            out = out +"  "+ c.name+" = "+c.color_human +"\t group "+str(c.group)
+            if self.current_group == c.group: 
+                out = out + " <-- "+c.button
+            out = out + "\n"
+        return out 
+
+    def get_color(self,object_name,return_type="human"):
+        '''
+        Get the color of object corresponding to the name 
+
+        object_name : str : name of object
+        return_type : str : one of ["human", "hex", "rgb"]
+        '''
+        for c in self.categories: 
+            if c.name == object_name:
+                if return_type == "human": 
+                    return c.color_human
+                color = c.color_hex
+                if return_type == "hex": 
+                    return color
+                elif return_type == "rgb": 
+                    return self.hex_to_bgr(color)
+                else: 
+                    raise ValueError("return_type is set to "+str(return_type)+". That is not one of ['human','hex','rgb']")
+        print("WARNING: Color not found for object name: "+ str(object_name) + ". Defaults to white.")
+        return "white"
+    
+    @classmethod 
+    def hex_to_bgr(self,value):
+        #Converts hex color code into bgr
+        value = value.lstrip('#')
+        lv = len(value)
+        rgb = tuple(int(value[i:i + lv // 3], 16) for i in range(0, lv, lv // 3))
+        bgr = (rgb[2],rgb[1],rgb[0])
+        return bgr 
+
 class Annotation: 
-    def __init__(self,file_id,df,manually_reviewed): 
+    def __init__(self,file_id,df,manually_reviewed,categories): 
         '''
         Class containing annotation data for image
 
@@ -1915,6 +2116,7 @@ class Annotation:
         file_id           : str          : Name of annotated file 
         df                : pd.Dataframe : Information about annotated objects. Contains colums: ["X","Y","type"] 
         manually_reviewed : bool         : Whether the annotation is manually reviewed or not 
+        categories        : Categories   : Information about categories 
         '''
         self.file_id = file_id 
         self.id_channel = "C"+self.file_id.rsplit("_C",1)[1]
@@ -1927,6 +2129,7 @@ class Annotation:
         self.df["object_id"] = self.id_channel + "_" + df["object_id"].astype('str') 
         self.df["contour_groups"] = ""
         self.contour_groups = None
+        self.categories = categories
 
     def add_contour_groups(self,contour_groups):
         '''
@@ -1939,12 +2142,13 @@ class Annotation:
                 self.df.loc[i,"contour_groups"] = self.contour_groups.get_contour_groups_with_point(xy) 
     
     @classmethod
-    def load_from_file(self,path):
+    def load_from_file(self,path,categories):
         '''
         Create annotation object from file info
 
         Params
-        path : str : Path to annotation file
+        path       : str        : Path to annotation file
+        categories : Categories : Information about categories that are annotated  
 
         Returns
         annotation : Annotation : Annotation object with file information
@@ -1987,7 +2191,7 @@ class Annotation:
         
         file_id = os.path.splitext(os.path.split(path)[1])[0]
         
-        annotation = Annotation(file_id,df,reviewed_by_human)
+        annotation = Annotation(file_id,df,reviewed_by_human,categories)
         
         return annotation
 
