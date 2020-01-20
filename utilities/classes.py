@@ -1047,10 +1047,10 @@ class Channel:
             names,colors = self.annotation.categories.get_info_text_img()
             for i in range(len(names)):
                 #print("name: {n}, col: {c}, x = {x}, y = {y}".format(n=names[i],c=colors[i],x=0,y=25*i+50))
-                cv2.putText(img,names[i],(0,25*i+50),cv2.FONT_HERSHEY_SIMPLEX,1,colors[i],1,cv2.LINE_AA) 
+                cv2.putText(img,names[i],(0,30*i+50),cv2.FONT_HERSHEY_SIMPLEX,1,colors[i],1,cv2.LINE_AA) 
             
-            df = self.annotation.df 
-            if i in df.index:
+            df = self.annotation.df
+            for i in df.index:
                 name = df.loc[i,"type"]
                 xy = (int(df.loc[i,"X"]),int(df.loc[i,"Y"]))
                 color = self.annotation.categories.get_color(name,return_type = "rgb")
