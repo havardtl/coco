@@ -983,7 +983,6 @@ class Channel:
                 a.add_contour_groups(self.contour_groups)
             
             if a.id_channel == self.id_channel:
-                self.annotation = a
                 if VERBOSE: print("\t"+"Channel: "+self.id_channel+"\tFound annotation file: "+a.file_id+"\t n_annotations: "+str(len(a.df.index)))
                 if not self.annotation_this_channel is None: 
                     raise ValueError("Multiple annotations match file id! "+self.file_id)
@@ -1740,11 +1739,12 @@ class Contour:
 
         Params
         annotation    : Annotation : object containing annotation information 
-        other_channel : bool       : if true, checks annotation of other channels as well. 
+        other_channel : bool       : if true, this annotation belongs to another channel and results are stored separately 
         '''
         if annotation is not None: 
+            if not other_channel: 
+                self.manually_reviewed = annotation.manually_reviewed 
             df = annotation.get_points(self.group_name)
-            self.manually_reviewed = annotation.manually_reviewed 
             for i in df.index:
                 xy = (df.loc[i,"X"],df.loc[i,"Y"]) 
                 if self.contour_box.contains_point(xy):
