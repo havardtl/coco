@@ -476,7 +476,7 @@ class Zstack:
         for i in self.images:
             if VERBOSE: print(i.z_index,end="  ",flush=True)
             all_channels = i.channels
-            if self.made_combined_masks: 
+            if self.made_combined_masks:
                 all_channels = all_channels + [i.combined_mask]
             for j in all_channels:
                 for k in j.contours: 
@@ -561,8 +561,11 @@ class Zstack:
         if VERBOSE: print("Writing info about contours ... ",end="",flush=True)
         df = pd.DataFrame() 
         for i in self.images: 
-            z_index = i.z_index 
-            for j in i.channels:
+            z_index = i.z_index
+            all_channels = i.channels
+            if self.made_combined_masks: 
+                all_channels = all_channels + [i.combined_mask]
+            for j in all_channels:
                 channel_id = j.id_channel 
                 for k in j.contours:
                     contour_id = k.id_contour 
@@ -1004,7 +1007,6 @@ class Channel:
         for c in self.contours:
             if len(c.annotation_this_channel_id)>0: 
                 contours.append(c.points)
-        print("len(contours) = "+str(len(contours)))
         cv2.drawContours(img_contours,contours,-1,(255),thickness = cv2.FILLED) 
         
         df = self.annotation_this_channel.df 
@@ -1032,7 +1034,6 @@ class Channel:
         Returns
         contours         : list        : wathershedded cv2 contours
         '''
-        if VERBOSE: print("\tWatershedding")
         unknown = cv2.subtract(contours_full,contours_centers)
 
         ret,markers = cv2.connectedComponents(contours_centers)
@@ -1647,7 +1648,7 @@ class Contour:
             "perimeter":perimeter,
             "hull_tot_area":cv2.contourArea(cv2.convexHull(self.points)),
             "radius_enclosing_circle":radius,
-            "equvialent_diameter":np.sqrt(4*area/np.pi),
+            "equivalent_radius":np.sqrt(area/np.pi),
             "circularity":float(4)*np.pi*area/(perimeter*perimeter),
             "at_edge":self.is_at_edge(),
             "next_z_overlapping":self.contour_list_as_str(self.next_z_overlapping), 
