@@ -1,5 +1,3 @@
-# TODO: Multiple is_inside_roi is registered. why?
-# TODO: Manual_reviewed is always false for combined channels?
 import sys 
 import os
 import math
@@ -590,7 +588,7 @@ class Zstack:
         if VERBOSE: print("Wrote contours info to "+contours_stats_path)
         df.to_csv(contours_stats_path,sep=";",index=False)
     
-    def make_projections(self,max_projection = True,auto_max=True,colorize = True,add_scale_bar = True,save_folder = "projections_raw"):
+    def make_projections(self,max_projection = True,auto_max=True,colorize = True,add_scale_bar = True,save_folder = None):
         '''
         Make projections from z_planes by finding the minimal or maximal value in the z-axis
         
@@ -600,13 +598,15 @@ class Zstack:
         auto_max        : bool : Auto level image after making projection
         colorize        : bool : Add color to image from segment_settings
         add_scale_bar   : bool : Add scale bar to image
-        save_folder     : str  : folder to save projections in 
+        save_folder     : str  : folder to save projections in. If None, this is stored in temp_folder/raw_projections 
         
         Updates
         self.projections : list of np.array : List of the projections of the z_planes as an 8-bit image. Ordered by channel_index.
         self.composite   : np.array         : Composite image of the projections
         '''
         if VERBOSE: print("Making projections for z_stack: "+self.id_z_stack)
+        if save_folder is None: 
+            save_folder = os.path.join(TEMP_FOLDER,"raw_projections")
         os.makedirs(save_folder,exist_ok=True)
 
         projections = []
@@ -2351,11 +2351,6 @@ class Roi_3d:
         for c in self.contours:
             for c_i in c.is_inside:
                 is_inside_roi.append(c_i.roi_3d_id)
-                #for cr in combined_rois:
-                #    for crc in cr.contours:
-                #        if c_i.id_contour == crc.id_contour:
-                #            is_inside_roi.append(cr.id_roi_3d)
-                #TODO: verify that this actually works
         is_inside_roi = list(set(is_inside_roi))
         self.is_inside_roi = is_inside_roi
 
