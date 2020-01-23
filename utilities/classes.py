@@ -1634,7 +1634,7 @@ class Contour:
 
             data = {
                 "sum_grey_"+str(channel.id_channel):[mean_grey],
-                "sum_positive_C"+str(channel.id_channel):[sum_pos_pixels]}
+                "sum_positive_"+str(channel.id_channel):[sum_pos_pixels]}
             
             self.data.update(data)
 
