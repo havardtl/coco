@@ -45,7 +45,7 @@ for i in range(len(file_id)):
 if len(file_id)<1:
     raise ValueError("Did not find any raw files in "+args.raw_data)
 
-df = pd.DataFrame(data = {"full_path":raw_files,"file_id":file_id,"treatment":None,"is_control":False,"stain_group":None})
+df = pd.DataFrame(data = {"full_path":raw_files,"file_id":file_id,"treatment":None,"replicate":None,"is_control":False,"stain_group":None})
 
 # Find exp setup file
 path_to_here = os.path.abspath(".")
@@ -91,6 +91,8 @@ if exp_setup_file is not None:
     #Replacing default columns if they are present in experiment info
     if "treatment" in exp_df.columns:
         df.drop("treatment",axis="columns",inplace=True)
+    if "replicate" in exp_df.columns:
+        df.drop("replicate",axis="columns",inplace=True)
     if "stain_group" in exp_df.columns:
         df.drop("stain_group",axis="columns",inplace=True)
     if "is_control" in exp_df.columns:
@@ -101,9 +103,9 @@ if exp_setup_file is not None:
 print(df)
 
 #Make sheet with plotting information for all variables
-always_present = ["channel_index","time_index" ,"series_index","img_dim"]
-plot_axis      = ["x"      ,"y"    ,"y"     ,None     ]
-importance     = [1        ,1      ,2       ,0        ]
+always_present = ["id_channel","channel_index","time_index" ,"series_index","img_dim"]
+plot_axis      = ["x"         , None      ,"y"    ,"y"     ,None     ]
+importance     = [1           ,0          ,0      ,2       ,0        ]
 in_annotation  = list(df.columns)
 
 plot_vars = pd.DataFrame(data = {"variable":always_present,"plot_axis":plot_axis,"importance":importance,"sort_ascending":True})

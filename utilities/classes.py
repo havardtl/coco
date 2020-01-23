@@ -202,7 +202,7 @@ class Segment_settings:
         self.AVAILABLE_THRESH_TYPES = ["canny_edge","binary"] 
         
         self.channel_index = self.to_int_or_none(channel_index)
-        
+        self.id_channel = "C"+str(self.channel_index) 
         self.global_max = self.to_int_or_none(global_max)
         
         if color is None: 
@@ -298,6 +298,7 @@ class Segment_settings:
     
     def get_dict(self):
         data = {
+            "id_channel": self.id_channel,
             "channel_index":self.channel_index,
             "color":self.color,
             "contrast":self.contrast,
@@ -378,9 +379,8 @@ class Zstack:
         if VERBOSE: print("Annotations found for this z_stack: "+str(len(this_z_stack)))
        
         for i in self.images: 
-            for j in i.channels: 
+            for j in i.channels + [i.combined_mask]: 
                 j.add_annotation(this_z_stack)
-            i.combined_mask.add_annotation(this_z_stack)
     
     def split_on_annotations(self): 
         '''
@@ -648,10 +648,10 @@ class Zstack:
             else: 
                 composite_img = cv2.add(composite_img,p.get_image()) 
         
-        new_channel_path = os.path.join(save_folder,self.id_z_stack+"_Ccomp.png")
+        new_channel_path = os.path.join(save_folder,self.id_z_stack+"_Ccomb.png")
         cv2.imwrite(new_channel_path,composite_img)
         composite = Channel(new_channel_path,max_channel_index + 1,0,(255,255,255))
-        composite.id_channel = "comb"
+        composite.id_channel = "Ccomb"
         composite.image = composite_img
                 
         self.composite = composite
@@ -815,6 +815,7 @@ class Image:
         empty_img_path       : str : path to all black image in same dimensions as combined masks
         '''
         channel_index = -1
+        id_channel = "Ccomb"
 
         channels_to_combine = []
         for s in self.segment_settings: 
@@ -834,11 +835,11 @@ class Image:
         cv2.imwrite(combined_mask_path,combined_mask)
         
         empty_img = np.zeros(combined_mask.shape,dtype="uint8")
-        empty_img_path = os.path.join(combined_mask_folder,z_stack_name+"_"+str(self.z_index)+"_"+str(channel_index)+".png")
+        empty_img_path = os.path.join(combined_mask_folder,z_stack_name+"_"+str(self.z_index)+"_"+id_channel+".png")
         cv2.imwrite(empty_img_path,empty_img)
         
         self.combined_mask = Channel(empty_img_path,channel_index,self.z_index,(255,255,255))
-        self.combined_mask.id_channel = "Ccomb"
+        self.combined_mask.id_channel = id_channel
         self.combined_mask.mask = combined_mask
         self.combined_mask.mask_path = combined_mask_path
         return None
@@ -986,14 +987,21 @@ class Channel:
                 a.add_contour_groups(self.contour_groups)
             
             if a.id_channel == self.id_channel:
-                if VERBOSE: print("\t"+"Channel: "+self.id_channel+"\tFound annotation file: "+a.file_id+"\t n_annotations: "+str(len(a.df.index)))
                 if not self.annotation_this_channel is None: 
                     raise ValueError("Multiple annotations match file id! "+self.file_id)
                 if a.manually_reviewed: 
                     self.annotation_this_channel = a
             else:
                 self.annotation_other_channel.append(a)
-    
+        
+        if VERBOSE: 
+            print("\t"+"Channel: " + self.id_channel,end="\t")
+            if self.annotation_this_channel is None: 
+                print("Did not find manually reviewed annotation file.",end="\t")
+            else: 
+                print("Found annotation file: "+self.annotation_this_channel.file_id+"\t n_annotations: "+str(len(a.df.index)),end="\t")
+            print("And added "+str(len(self.annotation_other_channel))+" other channel annotations")
+
     def split_on_annotations(self): 
         '''
         Split up contours based on annotations
@@ -1625,8 +1633,8 @@ class Contour:
             sum_pos_pixels = np.sum(sum_pos_pixels)/255
 
             data = {
-                "sum_grey_C"+str(channel.channel_index):[mean_grey],
-                "sum_positive_C"+str(channel.channel_index):[sum_pos_pixels]}
+                "sum_grey_"+str(channel.id_channel):[mean_grey],
+                "sum_positive_C"+str(channel.id_channel):[sum_pos_pixels]}
             
             self.data.update(data)
 
