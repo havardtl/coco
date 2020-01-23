@@ -999,7 +999,7 @@ class Channel:
             if self.annotation_this_channel is None: 
                 print("Did not find manually reviewed annotation file.",end="\t")
             else: 
-                print("Found annotation file: "+self.annotation_this_channel.file_id+"\t n_annotations: "+str(len(a.df.index)),end="\t")
+                print("Found annotation file: "+self.annotation_this_channel.file_id+"\t n_annotations: "+str(len(self.annotation_this_channel.df.index)),end="\t")
             print("And added "+str(len(self.annotation_other_channel))+" other channel annotations")
 
     def split_on_annotations(self): 
