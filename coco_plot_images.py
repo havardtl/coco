@@ -57,7 +57,6 @@ if args.stitch:
 
 classes.VERBOSE = args.verbose
 classes.TEMP_FOLDER = args.temp_folder 
-classes.PROJECTIONS_RAW_FOLDER = args.projections_raw_folder
 
 pdf_processed_images_folder = os.path.join(args.temp_folder,"pdf_processed_images")
 
@@ -104,7 +103,7 @@ def main(image_info,info,segment_settings):
     for z in z_stacks:
         if args.verbose: 
             z.print_all()
-        z.make_projections()
+        z.make_projections(save_folder = args.projections_raw_folder)
         df = pd.concat([df,z.get_projections_data()],ignore_index=True)
     if args.verbose: print(df)
     

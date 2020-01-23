@@ -2669,20 +2669,19 @@ class Image_in_pdf:
     
     def to_right_ratio(self):
         #If image has a different ratio than Crop image so that it has the goal_img_dim ratio. 
-        
         img_ratio = float(self.img_dim[1])/float(self.img_dim[0])
         if not ((self.goal_ratio - 0.01) < img_ratio < (self.goal_ratio + 0.01)):
             #if VERBOSE: print("Changing ratio")
             self.changed_image = True
             
             if img_ratio < self.goal_ratio:
-                new_width = int((img_ratio/self.goal_ratio)*float(self.img_dim[0]))
+                new_width = int(self.goal_ratio*float(self.img_dim[0]))
                 new_height = int(self.img_dim[0])
             else:
-                new_height  = int(self.img_dim[0])
-                new_width = int(new_height/self.goal_ratio)
+                new_width  = int(self.img_dim[1])
+                new_height = int((1/self.goal_ratio)*float(self.img_dim[1]))
             
-            self.img = self.imcrop(self.img,[0,0,new_height,new_width],value=(150,150,150))
+            self.img = self.imcrop(self.img,[0,0,new_width,new_height],value=(150,150,150))
             self.img_dim = self.img.shape
     
     def to_max_size(self):
