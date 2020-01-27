@@ -377,7 +377,7 @@ class Zstack:
             if self.id_z_stack in a.file_id: 
                 this_z_stack.append(a)
         if VERBOSE: print("Annotations found for this z_stack: "+str(len(this_z_stack)))
-       
+
         for i in self.images: 
             for j in i.channels + [i.combined_mask]: 
                 j.add_annotation(this_z_stack)
@@ -1001,6 +1001,14 @@ class Channel:
             else: 
                 print("Found annotation file: "+self.annotation_this_channel.file_id+"\t n_annotations: "+str(len(self.annotation_this_channel.df.index)),end="\t")
             print("And added "+str(len(self.annotation_other_channel))+" other channel annotations")
+        
+        if self.is_combined:
+            raise_error = False 
+            if self.annotation_this_channel is None: 
+                raise RuntimeError("Annotation not found for combined mask! Need to have a valid annotation file")
+            else: 
+                if len(self.annotation_this_channel.df.index)<1:
+                    raise RuntimeError("Found annotation for comined mask, but it is empty. Need to have a valid annotation file.")
 
     def split_on_annotations(self): 
         '''

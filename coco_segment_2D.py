@@ -11,7 +11,6 @@ parser.add_argument('--settings_file',type=str,default='annotation1.xlsx',help="
 parser.add_argument('--annotations',type=str,default='annotations',help="Folder with annotation of channel images")
 parser.add_argument('--categories',type=str,help='File to load category information from. Default is to load it from default file in utilities/categories.csv')
 parser.add_argument('--out_contours',type=str,default = 'stats/2D_contours_stats', help='Output folder for stats about contours')
-parser.add_argument('--out_rois',type=str,default = 'stats/2D_rois_stats', help='Output folder for stats about 3d rois')
 parser.add_argument('--out_graphical',type=str,default = 'graphical/2D_graphic_segmentation', help='Output folder for graphical representation of segmentation')
 parser.add_argument('--temp_folder',type=str,default='raw/temp',help="temp folder for storing temporary files.")
 parser.add_argument('--extracted_images_folder',type=str,default='raw/extracted_raw',help="Folder with extracted images.")
@@ -20,7 +19,7 @@ parser.add_argument('--cores',type=int,default=1,help='Number of cores to use. D
 parser.add_argument('--n_process',type=int,help='Process the n first alphabetically sorted files')
 parser.add_argument('--debug',action='store_true',default=False,help='Run in verbose mode and with one core for debugging')
 parser.add_argument('--verbose',action='store_true',default=False,help='Verbose mode')
-parser.add_argument('--overwrite',action = 'store_true',default=False,help='Overwrite all files rather than re-using exisiting files. Does not re-extract images. NB! does this by deleting --temp_folder, --out_rois, --out_graphical, --out_contours and all their content')
+parser.add_argument('--overwrite',action = 'store_true',default=False,help='Overwrite all files rather than re-using exisiting files. Does not re-extract images. NB! does this by deleting --temp_folder, --out_graphical, --out_contours and all their content')
 args = parser.parse_args()
 
 ########################
@@ -52,12 +51,11 @@ if not os.path.exists(args.settings_file):
         raise RunTimeError("Command did not finish properly. cmd: "+cmd)
 
 if args.overwrite:
-    for folder in [args.temp_folder,args.out_rois,args.out_graphical,args.out_contours]:
+    for folder in [args.temp_folder,args.out_graphical,args.out_contours]:
         oi.delete_folder_with_content(folder)
 
 os.makedirs(args.out_graphical,exist_ok=True)
 os.makedirs(args.out_contours,exist_ok=True)
-os.makedirs(args.out_rois,exist_ok=True)
 os.makedirs(args.temp_folder,exist_ok = True)
 os.makedirs(args.extracted_images_folder,exist_ok = True)
 
@@ -115,33 +113,28 @@ def main(image_info,segment_settings,annotations,info):
     '''
     
     global args
-    df_rois_path = os.path.join(args.out_rois,image_info.file_id+".csv")
-    
     print_str = str(info)+"\traw_img_path: "+str(image_info.raw_path)+"\t"
     
-    if os.path.exists(df_rois_path): 
-        print(print_str+"Stats already made, skipping this file")
-    else:
-        print(print_str+"Making 3D rois")
-        images_paths = image_info.get_extracted_files_path(extract_with_imagej=args.stitch)
-        z_stacks = oi.img_paths_to_zstack_classes(images_paths,segment_settings)
-        for i in range(len(z_stacks)):
-            z_stacks[i] = z_stacks[i].get_max_projection_zstack(segment_settings)
-            z_stacks[i].make_masks()
-            z_stacks[i].make_combined_masks()
-            z_stacks[i].find_contours()
-            z_stacks[i].group_contours()
-            z_stacks[i].add_annotations(annotations)
-            z_stacks[i].split_on_annotations()
-            z_stacks[i].group_contours()
-            z_stacks[i].is_inside_combined()
-            z_stacks[i].check_annotations()
-            z_stacks[i].update_contour_stats()
-            z_stacks[i].measure_channels()
-            z_stacks[i].write_contour_info()
-            z_stacks[i].to_pdf()
-            if args.verbose: z_stacks[i].print_all()
-        
+    print(print_str+"Making 3D rois")
+    images_paths = image_info.get_extracted_files_path(extract_with_imagej=args.stitch)
+    z_stacks = oi.img_paths_to_zstack_classes(images_paths,segment_settings)
+    for i in range(len(z_stacks)):
+        z_stacks[i] = z_stacks[i].get_max_projection_zstack(segment_settings)
+        z_stacks[i].make_masks()
+        z_stacks[i].make_combined_masks()
+        z_stacks[i].find_contours()
+        z_stacks[i].group_contours()
+        z_stacks[i].add_annotations(annotations)
+        z_stacks[i].split_on_annotations()
+        z_stacks[i].group_contours()
+        z_stacks[i].is_inside_combined()
+        z_stacks[i].check_annotations()
+        z_stacks[i].update_contour_stats()
+        z_stacks[i].measure_channels()
+        z_stacks[i].write_contour_info()
+        z_stacks[i].to_pdf()
+        if args.verbose: z_stacks[i].print_all()
+    
     return None
 
 if args.cores is -1:
