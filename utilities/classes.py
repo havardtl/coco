@@ -825,7 +825,6 @@ class Image:
         combined_mask = None
         for c in self.channels: 
             if c.channel_index in channels_to_combine:
-                c.is_combined = True 
                 if combined_mask is None: 
                     combined_mask = c.get_mask().copy()
                 else: 
@@ -948,8 +947,6 @@ class Channel:
         self.contours = None 
         self.n_contours = None
 
-        self.is_combined = False
-
         self.contour_groups = None
 
         self.img_w_contour_path = None 
@@ -1002,10 +999,10 @@ class Channel:
                 print("Found annotation file: "+self.annotation_this_channel.file_id+"\t n_annotations: "+str(len(self.annotation_this_channel.df.index)),end="\t")
             print("And added "+str(len(self.annotation_other_channel))+" other channel annotations")
         
-        if self.is_combined:
+        if self.id_channel == "Ccomb":
             raise_error = False 
             if self.annotation_this_channel is None: 
-                raise RuntimeError("Annotation not found for combined mask! Need to have a valid annotation file")
+                raise RuntimeError(str(self) +": Annotation not found! Combined masks need a valid annotation file.")
             else: 
                 if len(self.annotation_this_channel.df.index)<1:
                     raise RuntimeError("Found annotation for comined mask, but it is empty. Need to have a valid annotation file.")
@@ -1490,9 +1487,8 @@ class Channel:
         '''
         assert self.contours is not None,"Must run Channel.find_contours() before contours can be evaluated"
         assert other_channel.contours is not None,"Must to run Channel.find_contours() before contours can be evaluated"
-        if self.is_combined:  
-            for i in self.contours:
-                i.find_is_inside(other_channel)
+        for i in self.contours:
+            i.find_is_inside(other_channel)
 
     def __lt__(self,other):
         return self.channel_index < other.channel_index 

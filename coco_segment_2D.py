@@ -115,7 +115,7 @@ def main(image_info,segment_settings,annotations,info):
     global args
     print_str = str(info)+"\traw_img_path: "+str(image_info.raw_path)+"\t"
     
-    print(print_str+"Making 3D rois")
+    print(print_str+"Processing")
     images_paths = image_info.get_extracted_files_path(extract_with_imagej=args.stitch)
     z_stacks = oi.img_paths_to_zstack_classes(images_paths,segment_settings)
     for i in range(len(z_stacks)):
