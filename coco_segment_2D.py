@@ -9,7 +9,7 @@ parser.add_argument('--raw_folder',default="raw/rawdata",type=str,help='Folder w
 parser.add_argument('--raw_file',type=str,help='Supply a single raw file to process. Ignores --raw_folder if supplied.')
 parser.add_argument('--settings_file',type=str,default='annotation1.xlsx',help="Excel file with segmentation settings for channels. Make it with coco_make_annotation_file.py.")
 parser.add_argument('--annotations',type=str,default='annotations',help="Folder with annotation of channel images")
-parser.add_argument('--masks',type=str,default=None,help="Folder with masks. If supplied, z-stacks are split into one z_stack per mask. Naming convention for masks: '{file_id}_*_MASK_{mask_name}.*'. 255 = area to keep.")
+parser.add_argument('--masks',type=str,default=None,help="Folder with masks. If supplied, z-stacks are split into one z_stack per mask. Naming convention for masks: '{file_id}_*_MASK_{mask_name}.*'. 255 = area to keep. NB! Black holes in masks are ignored, so avoid donut like shapes as masks.")
 parser.add_argument('--categories',type=str,help='File to load category information from. Default is to load it from default file in utilities/categories.csv')
 parser.add_argument('--out_contours',type=str,default = 'stats/2D_contours_stats', help='Output folder for stats about contours')
 parser.add_argument('--out_graphical',type=str,default = 'graphical/2D_graphic_segmentation', help='Output folder for graphical representation of segmentation')
