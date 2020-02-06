@@ -5,6 +5,7 @@ import numpy as np
 import pandas as pd
 import cv2
 from io import StringIO 
+import copy
 
 sys.setrecursionlimit(10**6) 
 
@@ -315,6 +316,59 @@ class Segment_settings:
         string = "{class_str}: channel = {ch}, global_max = {g}, color = {col},contrast = {c},auto_max = {a},thresh_type = {tt},thresh_upper = {tu}, thresh_lower = {tl},open_kernel = {ok}, close_kernel = {ck}\n".format(class_str = self.__class__.__name__,ch = self.channel_index,g=self.global_max,col=self.color,c=self.contrast,a=self.auto_max,tt=self.thresh_type,tu=self.thresh_upper,tl=self.thresh_lower,ok = self.open_kernel_int,ck = self.close_kernel_int)
         return string
 
+class Mask: 
+
+    def __init__(self,mask_path):
+        '''
+        Mask that can be added to image so that only this part of the z_stack is processed. 
+
+        Params
+        mask_path : str : Path to mask. Must have naming convention '{file_id}_*_MASK_{mask_name}.*'
+        '''
+
+        self.mask_path = mask_path 
+        
+        self.file_id = os.path.splitext(os.path.split(self.mask_path)[1])[0]
+
+        self.mask_name = self.file_id.split("_MASK_",1)[1]
+
+        self.mask = cv2.imread(self.mask_path,cv2.IMREAD_GRAYSCALE)
+        self.mask_shape = self.mask.shape
+        
+        self.process_mask()
+    
+    def process_mask(self): 
+        #Make sure mask has smooth edges
+        ret,img = cv2.threshold(self.mask,5,255,cv2.THRESH_BINARY)
+        kernel = np.ones((20,20),np.uint8) 
+        img = cv2.morphologyEx(img,cv2.MORPH_OPEN,kernel)
+        self.mask = img
+
+    @classmethod 
+    def get_mask_list(self,mask_folder): 
+        '''
+        Convert a path to folder with masks into a list of Mask objects 
+
+        Params
+        mask_folder : str : Path to masks 
+        '''
+        masks = []
+        if mask_folder is None: 
+            return masks 
+        
+        mask_paths = os.listdir(mask_folder)
+        
+        if VERBOSE: print("Found "+str(len(mask_paths))+" masks in: "+mask_folder)
+        
+        for m in mask_paths: 
+            full_path = os.path.join(mask_folder,m)
+            masks.append(Mask(full_path))
+        
+        return masks
+
+    def __repr__(self): 
+        return "{class_str}({mask_path}): shape = {s}".format(class_str = self.__class__.__name__,mask_path = self.mask_path,s = self.mask_shape)
+
 class Zstack: 
 
     def __init__(self,images,file_id,series_index,time_index,find_physical_res = True):
@@ -364,6 +418,44 @@ class Zstack:
         self.composite = None
 
         self.made_combined_masks = False
+
+        self.filter_mask = None
+    
+    def filter_w_mask(self,masks,allow_no_mask = False): 
+        '''
+        Split up z_stack into one z_stack per mask
+        
+        Params
+        masks         : list of Mask : Masks to look through and split on
+        allow_no_mask : bool         : If false, an error is raised if no masks where found to match z_stack 
+        '''
+        matching_masks = []
+        for m in masks: 
+            if self.file_id in m.file_id: 
+                if not self.img_dim == m.mask_shape: 
+                    raise RuntimeError("Found a mask with matching file id but not matching shape. "+str(m)+" z_stack shape = "+self.img_dim)
+                matching_masks.append(m)
+
+        if len(matching_masks) == 0:
+            if not allow_no_mask: 
+                raise RuntimeError("Did not find any matching masks. len(masks) = "+str(len(masks))+", z_stack: "+str(self))
+            else:
+                return [self] 
+        
+        if VERBOSE: print("Found "+str(len(matching_masks))+" filter masks for this z_stack")
+        
+        new_z_stacks = []
+        for m in matching_masks:
+            new_z_stack = copy.deepcopy(self)
+            for i in new_z_stack.images:
+                for j in i.channels:
+                    j.filter_w_mask(m)
+            
+            new_z_stack.filter_mask = m
+            new_z_stack.id_z_stack = new_z_stack.id_z_stack + "_" + new_z_stack.filter_mask.mask_name
+            print("\t new_z_stack: "+str(new_z_stack))
+            new_z_stacks.append(new_z_stack)
+        return new_z_stacks 
 
     def add_annotations(self,annotations):
         '''
@@ -415,15 +507,29 @@ class Zstack:
             
         if VERBOSE: print("")
         
-    def make_combined_masks(self):
-        #Combine all masks into one to make a super object that other contours can be checked if they are inside
-        if VERBOSE: print("Making combined channels for all images in "+str(self))
-
-        for i in self.images:
-            if VERBOSE: print(i.z_index,end="  ",flush=True)
-            i.make_combined_channel(self.id_z_stack,self.combined_mask_folder)
+    def make_combined_masks(self,use_filter_mask = False):
+        '''
+        Combine all masks into one to make a super object that other contours can be checked if they are inside
         
-        if VERBOSE: print("")
+        Params
+        use_filter_mask : bool : Instead of making combined channel from combining masks, use the filter mask as a combined mask
+        '''
+        if use_filter_mask: 
+            if VERBOSE: print("Setting filter masks as combined_masks for all images in "+str(self))
+            
+            for i in self.images:
+                if VERBOSE: print(i.z_index,end="  ",flush=True)
+                i.set_combined_channel(self.id_z_stack,self.combined_mask_folder,self.filter_mask.mask,self.filter_mask.mask_path)
+            if VERBOSE: print("")
+        
+        else: 
+            if VERBOSE: print("Making combined channels for all images in "+str(self))
+
+            for i in self.images:
+                if VERBOSE: print(i.z_index,end="  ",flush=True)
+                i.make_combined_channel(self.id_z_stack,self.combined_mask_folder)
+            
+            if VERBOSE: print("")
         self.made_combined_masks = True 
 
     def find_contours(self): 
@@ -582,7 +688,8 @@ class Zstack:
         df["img_dim_x"] = self.img_dim[1]
         df["file_id"] = self.file_id 
         df["series_index"]  = self.series_index  
-        df["time_index"] = self.time_index  
+        df["time_index"] = self.time_index 
+        df["filter_mask"] = self.filter_mask.mask_name
 
         contours_stats_path = os.path.join(CONTOURS_STATS_FOLDER,self.id_z_stack+".csv")
         if VERBOSE: print("Wrote contours info to "+contours_stats_path)
@@ -803,7 +910,30 @@ class Image:
         self.segment_settings = segment_settings
 
         self.combined_mask = None 
+    
+    def set_combined_channel(self,z_stack_name,combined_mask_folder,combined_mask,combined_mask_path): 
+        '''
+        Set master channel that can be used to measure objects across channels
         
+        Params
+        z_stack_name         : str      : Name of z_stack 
+        combined_mask_folder : str      : Folder to save combined mask in 
+        combined_mask        : np.array : cv2.image, grayscale, uint8. 255 = pixels to measure.
+        combined_mask_path   : str      : Path to save combined mask to 
+        '''
+        channel_index = -1
+        id_channel = "Ccomb"
+
+        empty_img = np.zeros(combined_mask.shape,dtype="uint8")
+        empty_img_path = os.path.join(combined_mask_folder,z_stack_name+"_"+str(self.z_index)+"_"+id_channel+".png")
+        cv2.imwrite(empty_img_path,empty_img)
+        
+        self.combined_mask = Channel(empty_img_path,channel_index,self.z_index,(255,255,255))
+        self.combined_mask.id_channel = id_channel
+        self.combined_mask.mask = combined_mask
+        self.combined_mask.mask_path = combined_mask_path
+    
+
     def make_combined_channel(self,z_stack_name,combined_mask_folder):
         '''
         Merge masks into a channel. Useful for determining objects that other structures are inside. 
@@ -812,11 +942,7 @@ class Image:
         Params
         z_stack_name         : str : Name of z_stack 
         combined_mask_folder : str : Folder to save combined mask in 
-        empty_img_path       : str : path to all black image in same dimensions as combined masks
         '''
-        channel_index = -1
-        id_channel = "Ccomb"
-
         channels_to_combine = []
         for s in self.segment_settings: 
             if s.combine: 
@@ -833,15 +959,7 @@ class Image:
         combined_mask_path = os.path.join(combined_mask_folder,z_stack_name+"_z"+str(self.z_index)+".png")
         cv2.imwrite(combined_mask_path,combined_mask)
         
-        empty_img = np.zeros(combined_mask.shape,dtype="uint8")
-        empty_img_path = os.path.join(combined_mask_folder,z_stack_name+"_"+str(self.z_index)+"_"+id_channel+".png")
-        cv2.imwrite(empty_img_path,empty_img)
-        
-        self.combined_mask = Channel(empty_img_path,channel_index,self.z_index,(255,255,255))
-        self.combined_mask.id_channel = id_channel
-        self.combined_mask.mask = combined_mask
-        self.combined_mask.mask_path = combined_mask_path
-        return None
+        self.set_combined_channel(z_stack_name,combined_mask_folder,combined_mask,combined_mask_path)
 
     def make_masks(self,mask_save_folder):
         '''
@@ -953,6 +1071,15 @@ class Channel:
         
         self.annotation_this_channel = None
         self.annotation_other_channel = []
+    
+    def filter_w_mask(self,mask): 
+        '''
+        Filter channel so that only pixels within mask are kept
+
+        mask : Mask : Pixels to keep
+        '''
+        img = self.get_image()
+        self.image = cv2.bitwise_and(img,img,mask = mask.mask)
 
     def get_image(self):
         if self.image is not None: 
@@ -999,41 +1126,34 @@ class Channel:
                 print("Found annotation file: "+self.annotation_this_channel.file_id+"\t n_annotations: "+str(len(self.annotation_this_channel.df.index)),end="\t")
             print("And added "+str(len(self.annotation_other_channel))+" other channel annotations")
         
-        if self.id_channel == "Ccomb":
-            raise_error = False 
-            if self.annotation_this_channel is None: 
-                raise RuntimeError(str(self) +": Annotation not found! Combined masks need a valid annotation file.")
-            else: 
-                if len(self.annotation_this_channel.df.index)<1:
-                    raise RuntimeError("Found annotation for comined mask, but it is empty. Need to have a valid annotation file.")
-
     def split_on_annotations(self): 
         '''
         Split up contours based on annotations
         '''
-        self.check_annotation(self.annotation_this_channel)
-        img_dim = self.contours[0].img_dim 
-        img_contours = np.zeros(img_dim,dtype="uint8")
-        img_centers = img_contours.copy()
+        if self.annotation_this_channel is not None: 
+            self.check_annotation(self.annotation_this_channel)
+            img_dim = self.contours[0].img_dim 
+            img_contours = np.zeros(img_dim,dtype="uint8")
+            img_centers = img_contours.copy()
 
-        contours = []
-        for c in self.contours:
-            if len(c.annotation_this_channel_id)>0: 
-                contours.append(c.points)
-        cv2.drawContours(img_contours,contours,-1,(255),thickness = cv2.FILLED) 
-        
-        df = self.annotation_this_channel.df 
-        for i in df.index:
-            xy = (int(df.loc[i,"X"]),int(df.loc[i,"Y"]))
-            cv2.circle(img_centers,xy,2,color=255,thickness=-1)
-        contours = self.watershed(img_contours,img_centers)
-         
-        new_contours = []
-        for c in contours: 
-            new_contours.append(Contour(c,img_dim,self.z_index))
-        
-        self.contours = new_contours
-        self.n_contours = len(self.contours)
+            contours = []
+            for c in self.contours:
+                if len(c.annotation_this_channel_id)>0: 
+                    contours.append(c.points)
+            cv2.drawContours(img_contours,contours,-1,(255),thickness = cv2.FILLED) 
+            
+            df = self.annotation_this_channel.df 
+            for i in df.index:
+                xy = (int(df.loc[i,"X"]),int(df.loc[i,"Y"]))
+                cv2.circle(img_centers,xy,2,color=255,thickness=-1)
+            contours = self.watershed(img_contours,img_centers)
+             
+            new_contours = []
+            for c in contours: 
+                new_contours.append(Contour(c,img_dim,self.z_index))
+            
+            self.contours = new_contours
+            self.n_contours = len(self.contours)
 
     @classmethod
     def watershed(self,contours_full,contours_centers):	
@@ -2527,6 +2647,18 @@ class Rectangle:
         '''
         return not (self.top_left.y > other.bottom_right.y or self.top_left.x > other.bottom_right.x or self.bottom_right.y < other.top_left.y or self.bottom_right.x < other.top_left.x)
     
+    def is_inside(self,other): 
+        '''
+        check if this rectangle is entierly encompassed in the other rectangle
+
+        Params
+        other : Rectangle : Other rectangle to check if is inside 
+        '''
+        for p in [other.top_left,other.bottom_right]: 
+            if not self.contains_point(p): 
+                return False
+        return True
+
     def contains_point(self,xy): 
         '''
         Check if point is inside rectangle 

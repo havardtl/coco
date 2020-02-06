@@ -9,6 +9,7 @@ parser.add_argument('--raw_folder',default="raw/rawdata",type=str,help='Folder w
 parser.add_argument('--raw_file',type=str,help='Supply a single raw file to process. Ignores --raw_folder if supplied.')
 parser.add_argument('--settings_file',type=str,default='annotation1.xlsx',help="Excel file with segmentation settings for channels. Make it with coco_make_annotation_file.py.")
 parser.add_argument('--annotations',type=str,default='annotations',help="Folder with annotation of channel images")
+parser.add_argument('--masks',type=str,default=None,help="Folder with masks. If supplied, z-stacks are split into one z_stack per mask. Naming convention for masks: '{file_id}_*_MASK_{mask_name}.*'. 255 = area to keep.")
 parser.add_argument('--categories',type=str,help='File to load category information from. Default is to load it from default file in utilities/categories.csv')
 parser.add_argument('--out_contours',type=str,default = 'stats/2D_contours_stats', help='Output folder for stats about contours')
 parser.add_argument('--out_graphical',type=str,default = 'graphical/2D_graphic_segmentation', help='Output folder for graphical representation of segmentation')
@@ -101,7 +102,9 @@ if os.path.exists(args.annotations):
         annotations.append(classes.Annotation.load_from_file(os.path.join(args.annotations,a),categories))
     if args.verbose: print("Found "+str(len(annotations))+ " annotation files")
 
-def main(image_info,segment_settings,annotations,info):
+masks = classes.Mask.get_mask_list(args.masks)
+
+def main(image_info,segment_settings,annotations,masks,info):
     '''
     Process one file of the program 
 
@@ -109,6 +112,7 @@ def main(image_info,segment_settings,annotations,info):
     image_info       : Image_info               : Information about file to process
     segment_settings : list of Segment_settings : Information about how to process images
     annotations      : list of Annotations      : Annotations of images
+    masks            : list of Mask             : Masks to filter image by 
     info             : str                      : Info about the image that is processed to be printed
     '''
     
@@ -118,16 +122,31 @@ def main(image_info,segment_settings,annotations,info):
     print(print_str+"Processing")
     images_paths = image_info.get_extracted_files_path(extract_with_imagej=args.stitch)
     z_stacks = oi.img_paths_to_zstack_classes(images_paths,segment_settings)
+    
+    if len(masks)>0: 
+        use_filter_masks = True
+    else: 
+        use_filter_masks = False 
+    
+    new_z_stacks = []
     for i in range(len(z_stacks)):
         z_stacks[i] = z_stacks[i].get_max_projection_zstack(segment_settings)
+        if use_filter_masks:
+            new_z_stacks = new_z_stacks + z_stacks[i].filter_w_mask(masks)
+    
+    if use_filter_masks: 
+        z_stacks = new_z_stacks
+    
+    for i in range(len(z_stacks)): 
         z_stacks[i].make_masks()
-        z_stacks[i].make_combined_masks()
+        z_stacks[i].make_combined_masks(use_filter_masks)
         z_stacks[i].find_contours()
         z_stacks[i].group_contours()
         z_stacks[i].add_annotations(annotations)
         z_stacks[i].split_on_annotations()
         z_stacks[i].group_contours()
-        z_stacks[i].is_inside_combined()
+        if not use_filter_masks: 
+            z_stacks[i].is_inside_combined()
         z_stacks[i].check_annotations()
         z_stacks[i].update_contour_stats()
         z_stacks[i].measure_channels()
@@ -146,13 +165,13 @@ out = []
 if args.cores==1: 
     for i in range(0,len(raw_imgs)):
         info = str(i+1)+"/"+str(tot_images)
-        out.append(main(raw_imgs[i],segment_settings,annotations,info))
+        out.append(main(raw_imgs[i],segment_settings,annotations,masks,info))
 else: 
     pool = mp.Pool(args.cores)
 
     for i in range(0,len(raw_imgs)):
         info = str(i+1)+"/"+str(tot_images)
-        out.append(pool.apply_async(main,args=(raw_imgs[i],segment_settings,annotations,info)))
+        out.append(pool.apply_async(main,args=(raw_imgs[i],segment_settings,annotations,masks,info)))
 
     pool.close()
     pool.join()

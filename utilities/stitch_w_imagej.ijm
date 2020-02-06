@@ -31,9 +31,14 @@ for(i=1;i<=n_images;i++){
     channel = channel -1;
     z_id = img_name_vec[1];
     z_id = split(z_id,":/");
-    z_id = z_id[1];
-    z_id = parseInt(z_id);
-    z_id = z_id -1;
+    if(z_id.length < 2){
+        z_id = 0;
+    }else{
+        z_id = z_id[1];
+        z_id = parseInt(z_id);
+        z_id = z_id -1;
+    }
+    print("z_id: "+z_id);
     
     out_name =  out_path + "_INFO_zid-"+z_id+"-channel-"+channel+"-_OTHER.ome.tiff";
     
