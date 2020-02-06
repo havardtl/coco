@@ -466,7 +466,7 @@ class Zstack:
         '''
         this_z_stack = []
         for a in annotations: 
-            if self.id_z_stack in a.file_id: 
+            if self.file_id in a.file_id: 
                 this_z_stack.append(a)
         if VERBOSE: print("Annotations found for this z_stack: "+str(len(this_z_stack)))
 
