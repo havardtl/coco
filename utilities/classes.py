@@ -1080,6 +1080,7 @@ class Channel:
         '''
         img = self.get_image()
         self.image = cv2.bitwise_and(img,img,mask = mask.mask)
+        self.file_id = self.file_id + "_"+mask.mask_name
 
     def get_image(self):
         if self.image is not None: 
