@@ -39,7 +39,7 @@ class mainWindow:
         self.scale_image_label.pack()
 
         self.scale_image_entry_text = tk.StringVar()
-        self.scale_image_entry_text.set("1080")
+        self.scale_image_entry_text.set("900")
         self.scale_image_entry = tk.Entry(master,textvariable=self.scale_image_entry_text,width=5)
         self.scale_image_entry.pack()
         
