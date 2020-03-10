@@ -11,6 +11,7 @@ parser.add_argument('--annotation_file',type=str,default='annotation1.xlsx',help
 parser.add_argument('--projections_pdf_folder',type=str,default = 'graphical/projections_pdf', help='Output folder for pdfs with maximal projections')
 parser.add_argument('--projections_raw_folder',type=str,default = 'graphical/projections_raw', help='Output folder for raw maximal projections')
 parser.add_argument('--temp_folder',type=str,default='raw/temp',help="temp folder for storing temporary images. Must not exist before startup. default: ./coco_temp")
+parser.add_argument('--categories',type=str,help='File to load category information from. Default is to load it from default file in utilities/coco_categories.csv')
 parser.add_argument('--channel_colors',type=str,default = "(0,255,0),(255,0,255),(255,0,0),(0,0,255)",help='Colors to use for plotting channels. colors in BGR format. default: (0,255,0),(255,0,255),(255,0,0),(0,0,255)')
 parser.add_argument('--cores',type=int,help='Number of cores to use. Default is number of cores minus 1.')
 parser.add_argument('--n_process',type=int,help='Process the n first alphabetically sorted files')
@@ -37,6 +38,10 @@ import utilities.classes as classes
 ##############################
 # Run program
 ##############################
+this_script_folder = os.path.dirname(os.path.abspath(os.path.realpath(__file__)))
+if args.categories is None: 
+    args.categories = os.path.join(this_script_folder,"utilities","coco_categories.csv")
+
 if not os.path.exists(args.annotation_file): 
     cmd = "coco_make_annotation_file.py"
     exit_code = os.system(cmd)
@@ -77,12 +82,14 @@ raw_imgs.sort()
 
 print("Found {n_files} to process".format(n_files = len(raw_imgs)))
 
+categories = classes.Categories.load_from_file(args.categories)
+
 if not args.n_process is None:
     raw_imgs = raw_imgs[0:args.n_process]
 
 segment_settings = oi.excel_to_segment_settings(args.annotation_file)
 
-def main(image_info,info,segment_settings):
+def main(image_info,info,segment_settings,categories):
     '''
     Process one file of the program 
 
@@ -99,7 +106,7 @@ def main(image_info,info,segment_settings):
 
     if args.verbose: print("Getting info about z_stacks: ")
     df = pd.DataFrame()
-    z_stacks = oi.img_paths_to_zstack_classes(images_paths,segment_settings)
+    z_stacks = oi.img_paths_to_zstack_classes(images_paths,segment_settings,categories)
     for z in z_stacks:
         if args.verbose: 
             z.print_all()
@@ -125,13 +132,13 @@ else:
     if cores==1: 
         for i in range(0,len(raw_imgs)):
             info = str(i+1)+"/"+str(tot_images)
-            image_info.append(main(raw_imgs[i],info,segment_settings))
+            image_info.append(main(raw_imgs[i],info,segment_settings,categories))
     else: 
         pool = mp.Pool(cores)
 
         for i in range(0,len(raw_imgs)):
             info = str(i+1)+"/"+str(tot_images)
-            image_info.append(pool.apply_async(main,args=(raw_imgs[i],info,segment_settings)))
+            image_info.append(pool.apply_async(main,args=(raw_imgs[i],info,segment_settings,categories)))
 
         pool.close()
         pool.join()

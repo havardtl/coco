@@ -1,7 +1,0 @@
-name,color_hex,color_human,group_numb,button,show_size
-Tuft_cell,#FF0000,red,0,mouse_left,1
-Junk,#FFFF00,yellow,0,mouse_right,1
-Paneth_cell,#00FFFF,cyan,1,mouse_left,5
-Goblet_cell,#FFA800,orange,1,mouse_right,5
-Spheroid,#0000FF,blue,2,mouse_left,5
-Budding,#00FF00,green,2,mouse_right,5

@@ -4,11 +4,61 @@ import itertools
 import subprocess
 
 import pandas as pd
+import numpy as np
 import cv2
 
 import utilities.classes as classes 
 
 IMG_FILE_ENDING = ".ome.tiff"
+VERBOSE = False
+
+def find_stacks(folder):
+    '''
+    Find all stacks in folder and report them back as data frame with id column
+    
+    Params 
+    folder : str : path to folder with all stacks
+    
+    Returns
+    stacks : pandas.DataFrame : Data frame with path to stack and individual id of stack
+    
+    '''
+    stacks = walk_to_df(folder,id_split=None,filter_str="TIF")
+    if len(stacks) ==0:
+        raise ValueError("Did not find any stacks")
+
+    stacks_id = []
+    stacks_path = []
+    for i in stacks.index:
+        stacks_id.append(evos_to_imageid(stacks.loc[i,"file"]))
+        stacks_path.append(os.path.join(stacks.loc[i,"root"],stacks.loc[i,"file"]))
+    stacks["id"] = stacks_id
+    stacks["full_path"] = stacks_path
+    
+    return stacks
+
+def load_session_file(path):
+    '''
+    Load session file linking minimal projections and their respective annotation data
+    
+    Params
+    path    : str               : path to session file
+    
+    Returns
+    df      : pandas.DataFrame  : df with all annotation data
+    '''
+    if VERBOSE: print("Loading session file from: "+path)
+
+    df = pd.read_csv(path)
+    df.set_index("id",inplace=True)
+    
+    index = df.index[-1]
+    for i in df.index:
+        if not df.loc[i,'manually_reviewed']:
+            index = i
+            break
+
+    return(df,index)
 
 def print_percentage(i,tot,mod): 
     '''
@@ -52,13 +102,14 @@ def excel_to_segment_settings(excel_path):
         
     return segment_settings
         
-def img_paths_to_zstack_classes(img_paths,segment_settings): 
+def img_paths_to_zstack_classes(img_paths,segment_settings,categories): 
     '''
     Convert a list of images extracted with bfconvert into Zstack classes. 
     
     Params
     img_paths        : list of str              : Paths to files extracted with bfconvert. Assumes file names according to following convention: {experiment}_{plate}_{time}_{well}_{img_numb}_{other_info}_INFO_{series_index}_{time_index}_{z_index}_{channel_index}{file_ending}
     segment_settings : list of Segment_settings : List of segment settings classes. One for each channel index
+    categories       : Categories               : Categories relevant for this set of images
     
     Returns
     z_stacks    : list of Zstack : Files organized into Zstack classes for further use
@@ -91,7 +142,7 @@ def img_paths_to_zstack_classes(img_paths,segment_settings):
                         color = j.color
                         global_max = j.global_max
                         break 
-                channel = classes.Channel(this_image.loc[i,"full_path"],this_image.loc[i,"channel_index"],this_image.loc[i,"z_index"],color,global_max)
+                channel = classes.Channel(this_image.loc[i,"full_path"],this_image.loc[i,"channel_index"],this_image.loc[i,"z_index"],color,categories,global_max)
                 channels.append(channel)
             images.append(classes.Image(channels,z_index,segment_settings))
         
@@ -443,3 +494,143 @@ def all_images_in_same_ratio(df,cropped_images_folder):
     
     return df
 
+def find_edges(z_planes):
+    """
+    Find edges of obects in a stack of z_planes and return the projection of those edges
+
+    Params
+    z_planes : list : a list of paths to each plane in a stack of z_planes
+
+    Returns
+    edges : numpy.array : The minimal projection of found edges
+
+    """
+    if VERBOSE: print("\tFinding edges")
+    
+    edges = None
+    for plane_path in z_planes:
+        edge = cv2.imread(plane_path,cv2.IMREAD_ANYDEPTH)
+        max_pixel = np.amax(edge)
+        edge = (edge/(max_pixel/255)).astype('uint8')
+        edge = cv2.Canny(edge,100,200)
+        edge = classes.Channel.remove_small_objects(edge,60)
+        if edges is None: 
+            edges = edge
+        else:
+            edges = edges + edge
+    
+    kernel_3 = np.ones((3,3),np.uint8)   
+    edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel_3)
+    return edges
+
+def min_projection(z_planes):
+    '''
+    Make minimal projections from z_planes by finding the minimal value in the z-axis
+
+    Params 
+    z_planes : list: a list of paths to each plane in a stack of z_planes
+
+    Returns
+    min_projection: numpy.array : the minimal projection of the z_planes as an 8-bit image 
+
+    '''
+    if VERBOSE: print("\tMaking minimal projection")
+    
+    min_projection = None
+    for path in z_planes: 
+        plane = cv2.imread(path,cv2.IMREAD_ANYDEPTH)
+        if min_projection is None:
+            min_projection = plane
+        else: 
+           min_projection = np.minimum(min_projection,plane)
+           
+    max_pixel = min_projection.max()
+    min_projection = (min_projection/(max_pixel/255)).astype('uint8')
+    
+    return min_projection
+
+
+def walk_to_df(folder,id_split='-',filter_str=""):
+    '''
+    Find all files in folder recursively and report back as data frame with columns 
+    
+    Params
+    folder      : str   : path to folder to look for files
+    id_split    : str   : "id" is determined as everything before the first occurence of "id_split" in the file name. 
+    filter_str  :       : do not include file names that have this string in their name
+    
+    Returns
+    df          : pandas.DataFrame : data frame with information of all files in folder. "id" = file id, "root" = path to root folder, "file" = file name. 
+    '''
+    df = pd.DataFrame(columns = ["root","file"])
+    f_id = []
+    for root, dirs, fnames in os.walk(folder):
+        if root is not list: 
+            r = root
+            root = [r]
+        if len(fnames) > 0:
+            for r in root: 
+                temp = pd.DataFrame(columns = ["root","file"])
+                temp["file"] = fnames
+                temp["root"] = r
+                temp = temp[temp["file"].str.contains(filter_str)]
+                df = df.append(temp,ignore_index=True)
+    
+    if id_split is not None:
+        for f in df["file"]:
+            name = f.split(id_split,1)[0]
+            f_id.append(name)
+    else:
+        f_id = range(0,len(df["file"]))
+    
+    if not len(set(f_id)) == len(f_id):
+        raise ValueError("Ids can't be equal")
+
+    df["id"] = f_id
+    df.set_index('id',inplace=True)
+    
+    if VERBOSE: print("Found "+str(len(df.index))+" files in folder: "+folder)
+    
+    return(df)
+
+def evos_to_imageid(name):
+    """ 
+    Takes in EVOS image name and returns imageid 
+
+    Params 
+    name    : str : <exp>_<plate>_<day>_*_0_<well>f00d*.TIF
+
+    Returns 
+    imageid : str : <exp>_<plate>_<well>_<day>
+    """
+    if ".TIF" in name or ".tif" in name: 
+        exp = name.split("_",3)[:3]
+        well = name.split("_0_",1)[1].split("f00d",1)[0]
+        return (exp[0]+"_"+exp[1]+"_"+well+"_"+exp[2])
+    else: 
+        return (None)
+        
+def find_stacks(folder):
+    '''
+    Find all stacks in folder and report them back as data frame with id column
+    
+    Params 
+    folder : str : path to folder with all stacks
+    
+    Returns
+    stacks : pandas.DataFrame : Data frame with path to stack and individual id of stack
+    
+    '''
+    stacks = walk_to_df(folder,id_split=None,filter_str="TIF")
+    if len(stacks) ==0:
+        raise ValueError("Did not find any stacks")
+
+    stacks_id = []
+    stacks_path = []
+    for i in stacks.index:
+        stacks_id.append(evos_to_imageid(stacks.loc[i,"file"]))
+        stacks_path.append(os.path.join(stacks.loc[i,"root"],stacks.loc[i,"file"]))
+    stacks["id"] = stacks_id
+    stacks["full_path"] = stacks_path
+    
+    return stacks

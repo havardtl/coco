@@ -10,7 +10,7 @@ parser.add_argument('--raw_file',type=str,help='Supply a single raw file to proc
 parser.add_argument('--settings_file',type=str,default='annotation1.xlsx',help="Excel file with segmentation settings for channels. Make it with coco_make_annotation_file.py.")
 parser.add_argument('--annotations',type=str,default='annotations',help="Folder with annotation of channel images")
 parser.add_argument('--masks',type=str,default=None,help="Folder with masks. If supplied, z-stacks are split into one z_stack per mask. Naming convention for masks: '{file_id}_*_MASK_{mask_name}.*'. 255 = area to keep. NB! Black holes in masks are ignored, so avoid donut like shapes as masks.")
-parser.add_argument('--categories',type=str,help='File to load category information from. Default is to load it from default file in utilities/categories.csv')
+parser.add_argument('--categories',type=str,help='File to load category information from. Default is to load it from default file in utilities/coco_categories.csv')
 parser.add_argument('--out_contours',type=str,default = 'stats/2D_contours_stats', help='Output folder for stats about contours')
 parser.add_argument('--out_graphical',type=str,default = 'graphical/2D_graphic_segmentation', help='Output folder for graphical representation of segmentation')
 parser.add_argument('--temp_folder',type=str,default='raw/temp',help="temp folder for storing temporary files.")
@@ -43,7 +43,7 @@ import pickle
 ##############################
 this_script_folder = os.path.dirname(os.path.abspath(os.path.realpath(__file__)))
 if args.categories is None: 
-    args.categories = os.path.join(this_script_folder,"utilities","categories.csv")
+    args.categories = os.path.join(this_script_folder,"utilities","coco_categories.csv")
 
 if not os.path.exists(args.settings_file): 
     cmd = "coco_make_annotation_file.py"
@@ -104,7 +104,7 @@ if os.path.exists(args.annotations):
 
 masks = classes.Mask.get_mask_list(args.masks)
 
-def main(image_info,segment_settings,annotations,masks,info):
+def main(image_info,segment_settings,annotations,masks,info,categories):
     '''
     Process one file of the program 
 
@@ -121,7 +121,7 @@ def main(image_info,segment_settings,annotations,masks,info):
     
     print(print_str+"Processing")
     images_paths = image_info.get_extracted_files_path(extract_with_imagej=args.stitch)
-    z_stacks = oi.img_paths_to_zstack_classes(images_paths,segment_settings)
+    z_stacks = oi.img_paths_to_zstack_classes(images_paths,segment_settings,categories)
     
     if len(masks)>0: 
         use_filter_masks = True
@@ -165,13 +165,13 @@ out = []
 if args.cores==1: 
     for i in range(0,len(raw_imgs)):
         info = str(i+1)+"/"+str(tot_images)
-        out.append(main(raw_imgs[i],segment_settings,annotations,masks,info))
+        out.append(main(raw_imgs[i],segment_settings,annotations,masks,info,categories))
 else: 
     pool = mp.Pool(args.cores)
 
     for i in range(0,len(raw_imgs)):
         info = str(i+1)+"/"+str(tot_images)
-        out.append(pool.apply_async(main,args=(raw_imgs[i],segment_settings,annotations,masks,info)))
+        out.append(pool.apply_async(main,args=(raw_imgs[i],segment_settings,annotations,masks,info,categories)))
 
     pool.close()
     pool.join()

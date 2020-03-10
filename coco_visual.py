@@ -27,7 +27,7 @@ import pandas as pd
 #######################
 this_script_folder = os.path.dirname(os.path.abspath(os.path.realpath(__file__)))
 if args.categories is None: 
-    args.categories = os.path.join(this_script_folder,"utilities","categories.csv")
+    args.categories = os.path.join(this_script_folder,"utilities","coco_categories.csv")
 
 if args.from_first: 
     from_first = " --from_first"
@@ -73,7 +73,7 @@ if not os.path.exists(args.session_file):
     
     df.to_csv(args.session_file,index=False)
 
-cmd = "ORGAI_visual.py --session_file {s_f} --height {h} --zoom {z} --epsilon {e} --categories '{c}'{f_f}".format(s_f=args.session_file,h=args.height,z=args.zoom,e=args.epsilon,f_f=from_first,c=args.categories)
+cmd = "boco_visual.py --session_file {s_f} --height {h} --zoom {z} --epsilon {e} --categories '{c}'{f_f}".format(s_f=args.session_file,h=args.height,z=args.zoom,e=args.epsilon,f_f=from_first,c=args.categories)
 print(cmd)
 os.system(cmd)
 
