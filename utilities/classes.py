@@ -8,7 +8,8 @@ from io import StringIO
 import copy
 import datetime
 
-import utilities.neural_network.type_predict as ai 
+def load_neural_network(): 
+    import utilities.neural_network.type_predict as ai 
 
 sys.setrecursionlimit(10**6) 
 

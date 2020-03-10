@@ -41,6 +41,7 @@ import pandas as pd
 import utilities.image_processing_functions as oi
 import utilities.classes as classes
 
+classes.load_neural_network()
 ########################
 # setup 
 ########################
