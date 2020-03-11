@@ -10,11 +10,26 @@ main_path <- dirname(rstudioapi::getSourceEditorContext()$path)
 annotations_path <- file.path(main_path,"annotations")
 meta_data_file <- file.path(main_path,"treatment_info.xlsx")
 
+annotation_corrected_path <- file.path(main_path,"segmented_post_manual","annotations")
+
 projections_raw_dir <- file.path(main_path,"min_projections")
 projections_pdf <- file.path(main_path,"min_projections_pdf")
 projections_cropped_dir <- file.path(projections_pdf,"min_projections_cropped")
 
+save_path <- file.path(main_path,"annotations_summarized.xlsx")
+
 plot_images <- FALSE
+
+area_thresh <- 300
+
+####################################################
+# Check if manual correction is performed, and 
+# swap to that if it is done.
+####################################################
+if(dir.exists(annotation_corrected_path)){
+  annotations_path <- annotation_corrected_path 
+  save_path <- file.path(main_path,"segmented_post_manual","annotations_summarized_postsegment.xlsx")
+}
 
 ####################################################
 # get metadata, if available
@@ -38,7 +53,8 @@ for(f in annotation_files){
   temp<-temp[(index+1):length(temp)]
   temp<-temp[nchar(temp)>0]
   
-  temp <- read.table(text = temp,sep=",",as.is = T,header=1)
+  temp <- read.table(text = temp,sep=";",as.is = T,header=1)
+  temp$id <- tools::file_path_sans_ext(f)
   df <- rbind(df,temp)
 }
 
@@ -52,20 +68,26 @@ df$day <- temp$day
 ################################
 df$day_char <- paste0("Day ",df$day)
 
-df <- filter(df,!grepl("junk",type,ignore.case = T))
+df <- filter(df,!grepl("Junk",type,ignore.case = T))
+
+#Do not calculate stats for to small objects
+#Spheroids and budding fractions are not filtered out. 
+v <- c("area","equivalent_radius","perimeter","circularity","hull_tot_area","radius_enclosing_circle")
+df[df$area<area_thresh | is.na(df$area),v] <- NA
 
 df_by_well <- df %>%
   group_by(well_id,day) %>%
   summarize(day_char = day_char[1],
-            count=n(),
+            n_w_stats = sum(!is.na(area)),
             meanArea = mean(area,na.rm=T),
             sdArea = sd(area,na.rm=T),
-            meanSolidity = mean(solidity,na.rm=T),
-            sdSolidity = sd(solidity,na.rm=T),
+            meanEqRadius = mean(equivalent_radius,na.rm=T),
+            sdEqRadius = sd(equivalent_radius,na.rm=T),
             meanPerimeter = mean(perimeter,na.rm=T),
             sdPerimeter = sd(perimeter,na.rm=T),
             meanCirculairity = mean(circularity,na.rm=T),
             sdCircularity = sd(circularity,na.rm=T),
+            tot_annotated=n(),
             spheroids = sum(type=="Spheroid",na.rm=T),
             budding = sum(type=="Budding",na.rm=T),
             exploded = sum(type=="Exploded",na.rm=T))
@@ -73,8 +95,6 @@ df_by_well <- df %>%
 if(meta_data_present){
   df_by_well <- left_join(df_by_well,meta_data,by="well_id")
 }
-
-save_path <- file.path(main_path,"annotations_summarized.xlsx")
 
 write.xlsx(df_by_well,save_path)
 
