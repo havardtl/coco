@@ -93,10 +93,10 @@ if args.stitch:
     for image_info in raw_imgs: 
         image_info.get_extracted_files_path(extract_with_imagej=args.stitch)
 
+categories = classes.Categories.load_from_file(args.categories)
+
 annotations = []
 if os.path.exists(args.annotations): 
-    categories = classes.Categories.load_from_file(args.categories)
-    
     annotation_files = os.listdir(args.annotations)
     for a in annotation_files: 
         annotations.append(classes.Annotation.load_from_file(os.path.join(args.annotations,a),categories))
