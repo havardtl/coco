@@ -15,7 +15,6 @@ parser.add_argument('--categories',type=str,help='File to load category informat
 parser.add_argument('--channel_colors',type=str,default = "(0,255,0),(255,0,255),(255,0,0),(0,0,255)",help='Colors to use for plotting channels. colors in BGR format. default: (0,255,0),(255,0,255),(255,0,0),(0,0,255)')
 parser.add_argument('--cores',type=int,help='Number of cores to use. Default is number of cores minus 1.')
 parser.add_argument('--n_process',type=int,help='Process the n first alphabetically sorted files')
-parser.add_argument('--stitch',action="store_true",default=False,help='Stitch together images in xy-plane with ImageJs Grid-Collection stitching plugin. Requires ImageJ to be runnable as "ImageJ-linux64" and is highly experimental')
 parser.add_argument('--verbose',action='store_true',default=False,help='Verbose mode')
 parser.add_argument('--debug',action='store_true',default=False,help='Run in verbose mode and with one core for debugging')
 parser.add_argument('--overwrite',action = 'store_true',default=False,help='Overwrite all files rather than re-using exisiting files. NB! does this by deleting --temp_folder, --projections_raw_folder, --projections_pdf_folder and all their content')
@@ -56,10 +55,6 @@ if args.debug:
     args.cores = 1
     args.verbose = True
     
-if args.stitch: 
-    print("Warning! Cannot guarantee behaviour of ImageJ. Use at own risk! Also setting number of cores to 1.")
-    args.cores = 1
-
 classes.VERBOSE = args.verbose
 classes.TEMP_FOLDER = args.temp_folder 
 
@@ -76,7 +71,7 @@ pickle_path = os.path.join(args.temp_folder,"coco_plot_images_df.pickle")
 raw_imgs = []
 for i in os.listdir(args.raw_data): 
     raw_path = os.path.join(args.raw_data,i)
-    img_i = classes.Image_info(raw_path,args.temp_folder,args.extracted_images_folder)
+    img_i = classes.Image_czi(raw_path,args.temp_folder,args.extracted_images_folder)
     raw_imgs.append(img_i)
 raw_imgs.sort()
 
@@ -102,11 +97,13 @@ def main(image_info,info,segment_settings,categories):
 
     print(info+"\traw_img_path: "+image_info.raw_path+"\t Making projections")
     
-    images_paths = image_info.get_extracted_files_path(extract_with_imagej=args.stitch)
+    images_paths = image_info.get_extracted_files_path(extract_method="aicspylibczi",max_projection = True)
 
     if args.verbose: print("Getting info about z_stacks: ")
     df = pd.DataFrame()
-    z_stacks = oi.img_paths_to_zstack_classes(images_paths,segment_settings,categories)
+    
+    z_stacks = image_info.get_z_stack(segment_settings,categories,extract_method="aicspylibczi",max_projection = True)
+    
     for z in z_stacks:
         if args.verbose: 
             z.print_all()

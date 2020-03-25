@@ -7,6 +7,13 @@ import cv2
 from io import StringIO 
 import copy
 import datetime
+import aicspylibczi
+import pathlib
+import xml.etree.ElementTree as ET
+
+#TODO: Manual corrections should point to a new annotation file, not edit the old one. 
+
+#TODO: all functionality should happen in channel class. Z-stack and Image should be wrappers to add additonal functionality on top of that. 
 
 def load_neural_network(): 
     import utilities.neural_network.type_predict as ai 
@@ -27,7 +34,6 @@ TEST_SETTINGS_SHEET = "test_settings"
 SEGMENT_SETTINGS_SHEET = "segment_settings"
 ANNOTATION_SHEET = "annotation"
 PLOT_VARS_SHEET = "plot_vars"
-IMG_FILE_ENDING = ".ome.tiff"
 
 contour_id_counter = 0
 roi3d_id_counter = 0
@@ -56,7 +62,12 @@ def set_zipped_list(a,b):
 # Classes
 ###############################################
 
-class Image_info:
+#TODO: implement this class with the goal of a function that gives a processed z_stack 
+class Image_evos: 
+    def __init__(self): 
+        pass 
+
+class Image_czi:
 
     def __init__(self,raw_path,temp_folder,extracted_folder,pickle_folder=None):
         self.raw_path = raw_path 
@@ -71,29 +82,223 @@ class Image_info:
             self.pickle_path = None
         
         self.extracted_images_info_file = os.path.join(self.extracted_folder,"files_info.txt")
+        
+        self.OME_FILE_ENDING = ".ome.tiff"
+        self.file_ending = copy.copy(self.OME_FILE_ENDING)
     
-    def get_extracted_files_path(self,extract_with_imagej=False):
+    def get_extracted_files_path(self,extract_method,max_projection = True):
+        '''
+        Extract images from microscopy image file. 
+        
+        Params
+        extract_method : str  : Dependency to use for extracting images. one of "aicspylibczi", "bfconvert" and "imagej". 
+        max_projection : bool : If aicspylibczi is selected, a maximal projection can be made in the extraction process
+        
+        Returns
+        images_path : list of str : Path to extracted images. File names according to following convention: {file_id}_INFO_{series_index}_{time_index}_{z_index}_{channel_index}{file_ending}
+        '''
+        if extract_method == "aicspylibczi":
+            self.file_ending = ".tiff"
+        
         if not os.path.exists(self.extracted_images_info_file):
-            if extract_with_imagej:
-                self.get_images_imagej()
-            else:
-                self.get_images_bfconvert()
+            if extract_method == "aicspylibczi":
+                self.extract_aicspylibczi(max_projection)
+            elif extract_method == "bfconvert": 
+                if max_projection: 
+                    raise ValueError("Max projection option not implemented for bfconvert extraction method")
+                self.extract_images_bfconvert()
+            elif extract_method == "imagej": 
+                if max_projection: 
+                    raise ValueError("Max projection option not implemented for imagej extraction method")
+                self.extract_images_imagej()
+            else: 
+                raise ValueError("Not a valid extraction method. extract_method = "+extract_method)
     
         with open(self.extracted_images_info_file,'r') as f: 
             images_paths = f.read().splitlines()
         
         return images_paths
     
-    def get_images_bfconvert(self):
+    def get_z_stack(self,segment_settings,categories,extract_method,max_projection = True,): 
+        '''
+        Convert a list of extracted images to Zstack classes. 
+        
+        Params
+        segment_settings : list of Segment_settings : List of segment settings classes. One for each channel index
+        categories       : Categories               : Categories relevant for this set of images
+        
+        Returns
+        z_stacks    : list of Zstack : Files organized into Zstack classes for further use
+        
+        '''
+        img_paths = self.get_extracted_files_path(extract_method,max_projection)
+        
+        df_images = pd.DataFrame(data = {"full_path":img_paths})
+        df_images["root"],df_images["fname"] = df_images["full_path"].str.rsplit("/",1).str
+        df_images["fid"],df_images["info"] = df_images["fname"].str.split("_INFO_",1).str
+        df_images["info"] = df_images["info"].str.replace(self.file_ending,"")
+        df_images["series_index"],df_images["time_index"],df_images["z_index"],df_images["channel_index"] = df_images["info"].str.split("_",3).str
+
+        df_images["image_id"] = "S"+df_images["series_index"]+"T"+df_images["time_index"]+"Z"+df_images["z_index"]
+        df_images["z_stack_id"] = "S"+df_images["series_index"]+"T"+df_images["time_index"]
+
+        z_stacks = []
+        for z_stack_id in df_images["z_stack_id"].unique(): 
+            this_z = df_images.loc[df_images["z_stack_id"]==z_stack_id,]
+            
+            images = []
+            for z_index in this_z["z_index"].unique():
+                this_image = this_z.loc[this_z["z_index"]==z_index,]
+                channels = []
+                for i in this_image.index: 
+                    color = None
+                    global_max = None
+                    for j in segment_settings: 
+                        if str(j.channel_index) == str(this_image.loc[i,"channel_index"]):
+                            color = j.color
+                            global_max = j.global_max
+                            break 
+                    channel = Channel(this_image.loc[i,"full_path"],this_image.loc[i,"channel_index"],this_image.loc[i,"z_index"],color,categories,global_max)
+                    channels.append(channel)
+                images.append(Image(channels,z_index,segment_settings))
+            
+            file_id = this_z["fid"].iloc[0]
+            time_index = this_z["time_index"].iloc[0]
+            series_index = this_z["series_index"].iloc[0]
+            
+            z_stacks.append(Zstack(images,file_id,series_index,time_index))
+        
+        for z in z_stacks: 
+            if extract_method == "aicspylibczi":
+                z.set_physical_res(self.resolution_aicspylibczi())
+            else: 
+                z.find_physical_res()
+            
+        return z_stacks
+    
+    def resolution_aicspylibczi(self): 
+        '''
+        Find resolution in meta_data file from extraction of images with aicspylibczi
+        
+        Returns 
+        physical_size_x : dict : dictionary of resolutions of "x","y","z" and the "unit".  
+        '''
+        def line_to_value(line): 
+            tag,value = line.split("\t")
+            value = float(value.strip())
+            return value
+            
+        metadata_path = os.path.join(self.extracted_folder,"meta_data.txt")
+        
+        physical_size = dict()
+        with open(metadata_path,'r') as f: 
+            lines = f.readlines()
+
+        for l in lines: 
+            if "ScalingX" in l: 
+                physical_size['x'] = line_to_value(l)
+            if "ScalingY" in l:     
+                physical_size['y'] = line_to_value(l)
+            if "ScalingZ" in l: 
+                physical_size['z'] = line_to_value(l)
+                
+        #Value is in meters, so changing to micrometers
+        for k in physical_size.keys(): 
+            physical_size[k] = physical_size[k] * 10**6
+        physical_size["unit"] = "um"
+        
+        if VERBOSE: print("Read physical size from:"+metadata_path+"\n\t"+str(physical_size))
+        
+        return physical_size
+    
+    def recursive_xml_find(self,root,tag): 
+        '''
+        Return first element in xml tree that have tag. Recursive.
+
+        root : lxml.etree : xml tree
+        tag  : str        : tag of element to find
+        
+        Returns
+        result : list of Element : List of elemnents. result[i].tag = key, result[i].text = value
+        '''
+        return (list(root.iter(tag)))
+
+    def meta_xml_to_file(self,czi,out_path): 
+        '''
+        Extract some useful metadata from czi image object and write it to a file
+        '''
+        meta_data = czi.meta
+        data = list()
+        data = data + self.recursive_xml_find(meta_data,"ScalingX")
+        data = data + self.recursive_xml_find(meta_data,"ScalingY")
+        data = data + self.recursive_xml_find(meta_data,"ScalingZ")
+        data = data + self.recursive_xml_find(meta_data,"Dye")
+        data = data + self.recursive_xml_find(meta_data,"ImageChannelName")
+        
+        with open(out_path,'w') as f: 
+            for d in data: 
+                f.write(str(d.tag)+"\t"+str(d.text)+"\n")
+    
+    def extract_aicspylibczi(self,max_projection=True): 
+        # TODO: implement each of these extraction methods as their own class
+        # also move finding of physical resolution to each of these classes instead of having it in z_stack
+        '''
+        Use aicspylibczi to extract images from czi file. Assumes time and series dimensions = 1. 
+
+        Params
+        max_projection : bool : Make minimal projection of z_stack
+        '''
+        
+        if VERBOSE: print("Reading file: " + self.raw_path + "\t and extracting to folder: " + self.extracted_folder)
+        
+        czi = aicspylibczi.CziFile(pathlib.Path(self.raw_path))
+        dims = czi.dims_shape()[0]
+        channels = list(range(dims['C'][1]))
+        z_indexes = list(range(dims['Z'][1]))
+        
+        if czi.is_mosaic(): 
+            for c in channels: 
+                img_projection = None 
+                for z in z_indexes: 
+                    img = czi.read_mosaic(C=c,Z=z,scale_factor=1)
+                    img = np.squeeze(img)
+                    if not max_projection: 
+                        out_path = out_path.join(self.extracted_folder,self.file_id + "_INFO_0_0_"+str(z)+"_"+str(c)+self.file_ending)
+                        if VERBOSE: print("\tChannel: "+str(c)+"/"+str(max(channels))+"\tZ_index: "+str(z)+"/"+str(max(z))+"\tWriting: "+out_path)
+                        cv2.imwrite(out_path,img)
+                    else: 
+                        if img_projection is None: 
+                            img_projection = img
+                        else: 
+                            img_projection = np.maximum(img_projection,img)
+                if max_projection:
+                    out_path = os.path.join(self.extracted_folder,self.file_id + "_INFO_0_0_0_"+str(c)+self.file_ending)
+                    if VERBOSE: print("\tChannel: "+str(c)+"/"+str(max(channels))+"\tWriting: "+out_path)
+                    cv2.imwrite(out_path,img_projection)
+                
+        else: 
+            raise ValueError("Have not yet implemented not mosaic file")
+            #TODO
+        
+        self.meta_xml_to_file(czi,os.path.join(self.extracted_folder,"meta_data.txt"))
+        
+        img_paths = []
+        for path in os.listdir(self.extracted_folder):
+            if path.endswith(".tiff"):
+                img_paths.append(os.path.join(self.extracted_folder,path))
+        
+        with open(self.extracted_images_info_file,'w') as f: 
+            for path in img_paths: 
+                f.write(path+"\n")
+    
+    def extract_bfconvert(self):
         '''
         Use bfconvert tool to get individual stack images from microscopy format file
         '''
         
-        global IMG_FILE_ENDING,VERBOSE
-        
         bfconvert_info_str = "_INFO_%s_%t_%z_%c"
         
-        out_name = self.file_id+bfconvert_info_str+IMG_FILE_ENDING 
+        out_name = self.file_id+bfconvert_info_str+self.file_ending 
         out_name = os.path.join(self.extracted_folder,out_name)
         log_file = os.path.join(os.path.split(self.extracted_folder)[0],"log_"+self.file_id+".txt")
 
@@ -108,7 +313,7 @@ class Image_info:
         img_paths = [] 
         
         for path in os.listdir(self.extracted_folder):
-            if path.endswith(IMG_FILE_ENDING):
+            if path.endswith(self.file_ending):
                 img_paths.append(os.path.join(self.extracted_folder,path))
         
         with open(os.path.join(self.extracted_folder,self.extracted_images_info_file),'w') as f: 
@@ -116,12 +321,16 @@ class Image_info:
                 f.write(path+"\n")
         
 
-    def get_images_imagej(self):
+    def extract_imagej(self,use_xvfb = True):
         '''
         Use imagej to get individual stack images from microscopy format file. This script also stitch together images in x-y plane.
+        
+        Sometimes you get problems when ImageJ tries to reuse the same session. I think this might be solved by unchecking the box "Run single instance listener" under Edit --> Options --> Misc...  
+        
+        Params 
+        use_xvfb : bool : Run imagej with xvfb-run command to avoid need for showing imagej bar etc.
         '''
         
-        global IMG_FILE_ENDING,VERBOSE
         info_split_str = "_INFO"
 
         this_script_folder = os.path.split(os.path.abspath(__file__))[0]
@@ -129,11 +338,13 @@ class Image_info:
         
         raw_path_full = os.path.abspath(self.raw_path)
         fname = os.path.splitext(os.path.split(self.raw_path)[1])[0]
-        out_name = fname#+info_split_str+IMG_FILE_ENDING 
+        out_name = fname#+info_split_str+self.file_ending 
         out_name = os.path.abspath(os.path.join(self.extracted_folder,out_name))
         log_file = os.path.abspath(os.path.join(os.path.split(self.extracted_folder)[0],"log_"+fname+".txt"))
-       
+        
         cmd = "ImageJ-linux64 --ij2 --console -macro \"{imagej_macro_path}\" \"{file_path},{out_name}\"".format(imagej_macro_path = imagej_macro_path,file_path = raw_path_full,out_name = out_name,log_file = log_file)
+        if use_xvfb: 
+            cmd = "xvfb-run -a "+cmd
         
         if VERBOSE:
             print(cmd)
@@ -155,7 +366,7 @@ class Image_info:
         
         img_paths = os.listdir(self.extracted_folder)
         for old_path in img_paths: 
-            if old_path.endswith(IMG_FILE_ENDING):
+            if old_path.endswith(self.file_ending):
                 file_id,zid_and_channel = old_path.split("_INFO_",1)
                 zid_and_channel = zid_and_channel.split("-",4)
                 z_id = zid_and_channel[1]
@@ -165,7 +376,7 @@ class Image_info:
 
         img_paths = []
         for path in os.listdir(self.extracted_folder):
-            if path.endswith(IMG_FILE_ENDING):
+            if path.endswith(self.file_ending):
                 img_paths.append(os.path.join(self.extracted_folder,path))
         
         with open(self.extracted_images_info_file,'w') as f: 
@@ -372,7 +583,7 @@ class Mask:
 
 class Zstack: 
 
-    def __init__(self,images,file_id,series_index,time_index,find_physical_res = True):
+    def __init__(self,images,file_id,series_index,time_index):
         '''
         Object representing a z_stack
         
@@ -381,7 +592,6 @@ class Zstack:
         file_id           : str  : Id that identifies the file 
         series_index      : str  : Index of image series when imaging multiple location in one go 
         time_index        : str  : Index of time index in timed experiments
-        find_physical_res : bool : Whether to find physical res of image
         '''
         
         global VERBOSE,TEMP_FOLDER,CONTOURS_STATS_FOLDER
@@ -412,8 +622,6 @@ class Zstack:
 
         self.img_dim = self.images[0].get_img_dim()
         self.physical_size = None
-        if find_physical_res: 
-            self.find_physical_res()
 
         self.projections = None
         self.composite = None
@@ -641,8 +849,16 @@ class Zstack:
         return rois_3d 
     
     def find_physical_res(self):
-        #Get physical resolution for the z_stack in um per pixel
+        #Get physical resolution for the z_stack 
         self.physical_size = self.images[0].get_physical_res(self.xml_folder)
+        for i in self.images: 
+            for j in i.channels: 
+                j.x_res = self.physical_size["x"]
+                j.x_unit = self.physical_size["unit"]
+    
+    def set_physical_res(self,physical_size): 
+        #Set physical resolution for the z_stack
+        self.physical_size = physical_size
         for i in self.images: 
             for j in i.channels: 
                 j.x_res = self.physical_size["x"]
@@ -815,7 +1031,7 @@ class Zstack:
 
         image = Image(self.projections,0,segment_settings)
 
-        zstack = Zstack([image],self.file_id,self.series_index,self.time_index,False)
+        zstack = Zstack([image],self.file_id,self.series_index,self.time_index)
         zstack.physical_size = self.physical_size
         return zstack 
 
@@ -1628,6 +1844,17 @@ class Channel:
         '''
         for i in self.contours: 
             i.find_z_overlapping(next_z)
+            
+    def measure_channels(self,channels): 
+        '''
+        Measure intensity of supplied channels in all contours in this channel
+        
+        Params
+        channel : list of Channel : Channels to measure intensities in 
+        '''
+        
+        for i in self.contours: 
+            i.measure_channel(channels)
 
     def classify_objects(self,single_objects_folder = None): 
         '''
@@ -2782,27 +3009,29 @@ class Annotation:
             next_object_id = int(next_object_id.strip())
 
         changelog = lines[changelog_line+1:info_line]
-        changelog = "\n".join(changelog)
-
-        annotation_raw = ""
-        for l in lines[info_line+1:]:
-            annotation_raw = annotation_raw+l
+        changelog = "".join(changelog)
         
-        annotation_raw = StringIO(annotation_raw)
+        annotation_raw = lines[info_line+1:]
         
-        if "next_org_id" in lines[1]: 
-            sep = ","
-        else: 
-            sep = ";"
-        df = pd.read_csv(annotation_raw,sep = sep)
+        if len(annotation_raw) > 1: 
+            annotation_raw = "".join(annotation_raw)
+            annotation_raw = StringIO(annotation_raw)
         
-        if "org_id" in df.columns: #legacy version of file 
-            df["object_id"] = df["org_id"]
-            df["center_x"] = df["X"]
-            df["center_y"] = df["Y"]
-
-        df = df.loc[:,["center_x","center_y","type","object_id"]].copy()
-        
+            if "next_org_id" in lines[1]: 
+                sep = ","
+            else: 
+                sep = ";"
+            df = pd.read_csv(annotation_raw,sep = sep)
+            
+            if "org_id" in df.columns: #legacy version of file 
+                df["object_id"] = df["org_id"]
+                df["center_x"] = df["X"]
+                df["center_y"] = df["Y"]
+                
+            df = df.loc[:,["center_x","center_y","type","object_id"]].copy()
+        else:
+            df = pd.DataFrame(columns = ["center_x","center_y","type","object_id"])
+            
         return reviewed_by_human,changelog,df,next_object_id 
 
     @classmethod
@@ -2831,8 +3060,7 @@ class Annotation:
                 f.write("reviewed_by_human = False\n")
             f.write("next_object_id = "+str(int(next_object_id))+"\n")
             f.write("--changelog--\n")
-            for l in changelog: 
-                f.write(l)
+            f.write(changelog)
             f.write("--organoids--\n")
             
         if df is not None: 
@@ -3236,8 +3464,9 @@ class Image_in_pdf:
             else:
                 new_width  = int(self.img_dim[1])
                 new_height = int((1/self.goal_ratio)*float(self.img_dim[1]))
-            
-            self.img = Channel.imcrop(self.img,[0,0,new_width,new_height],value=(150,150,150))
+                
+            right_ratio_rectangle = Rectangle([0,0,new_width,new_height])
+            self.img = Channel.imcrop(self.img,right_ratio_rectangle,value=(150,150,150))
             self.img_dim = self.img.shape
     
     def to_max_size(self):

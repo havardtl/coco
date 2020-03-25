@@ -1,3 +1,5 @@
+#TODO: Move all functions from this file into classes.py
+
 import os
 import math
 import itertools
@@ -104,7 +106,7 @@ def excel_to_segment_settings(excel_path):
         
 def img_paths_to_zstack_classes(img_paths,segment_settings,categories): 
     '''
-    Convert a list of images extracted with bfconvert into Zstack classes. 
+    Convert a list of extracted images to Zstack classes. 
     
     Params
     img_paths        : list of str              : Paths to files extracted with bfconvert. Assumes file names according to following convention: {experiment}_{plate}_{time}_{well}_{img_numb}_{other_info}_INFO_{series_index}_{time_index}_{z_index}_{channel_index}{file_ending}

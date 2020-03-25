@@ -15,7 +15,7 @@ parser.add_argument('--out_contours',type=str,default = 'stats/2D_contours_stats
 parser.add_argument('--out_graphical',type=str,default = 'graphical/2D_graphic_segmentation', help='Output folder for graphical representation of segmentation')
 parser.add_argument('--temp_folder',type=str,default='raw/temp',help="temp folder for storing temporary files.")
 parser.add_argument('--extracted_images_folder',type=str,default='raw/extracted_raw',help="Folder with extracted images.")
-parser.add_argument('--stitch',default=False,action="store_true",help='Switch that turns on stitching of images using ImageJ. NB! Very experimental')
+parser.add_argument('--extract_method',default='aicspylibczi',type=str,help='Dependency to use to extract czi images. one of: "aicspylibczi", "bfconvert", "imagej". aicspylibczi is default and always stitches. bfconvert does not stitch. Imagej stitches and is highly experimental')
 parser.add_argument('--cores',type=int,default=1,help='Number of cores to use. Default is 1. -1 = number of cores -1')
 parser.add_argument('--n_process',type=int,help='Process the n first alphabetically sorted files')
 parser.add_argument('--debug',action='store_true',default=False,help='Run in verbose mode and with one core for debugging')
@@ -67,11 +67,11 @@ if args.raw_file is None:
     raw_imgs = []
     for i in os.listdir(args.raw_folder): 
         raw_path = os.path.join(args.raw_folder,i)
-        img_i = classes.Image_info(raw_path,args.temp_folder,args.extracted_images_folder,pickle_folder)
+        img_i = classes.Image_czi(raw_path,args.temp_folder,args.extracted_images_folder,pickle_folder)
         raw_imgs.append(img_i)
     raw_imgs.sort()
 else: 
-    raw_imgs = [classes.Image_info(args.raw_file,args.temp_folder,args.extracted_images_folder,pickle_folder)]
+    raw_imgs = [classes.Image_czi(args.raw_file,args.temp_folder,args.extracted_images_folder,pickle_folder)]
     args.cores = 1
 
 if not args.n_process is None:
@@ -89,10 +89,6 @@ classes.GRAPHICAL_SEGMENTATION_FOLDER = args.out_graphical
 print("Found {n_files} to process".format(n_files = len(raw_imgs)))
 segment_settings = oi.excel_to_segment_settings(args.settings_file)
 
-if args.stitch: 
-    for image_info in raw_imgs: 
-        image_info.get_extracted_files_path(extract_with_imagej=args.stitch)
-
 categories = classes.Categories.load_from_file(args.categories)
 
 annotations = []
@@ -109,7 +105,7 @@ def main(image_info,segment_settings,annotations,masks,info,categories):
     Process one file of the program 
 
     Params
-    image_info       : Image_info               : Information about file to process
+    image_info       : Image_czi                : Images to process
     segment_settings : list of Segment_settings : Information about how to process images
     annotations      : list of Annotations      : Annotations of images
     masks            : list of Mask             : Masks to filter image by 
@@ -120,21 +116,19 @@ def main(image_info,segment_settings,annotations,masks,info,categories):
     print_str = str(info)+"\traw_img_path: "+str(image_info.raw_path)+"\t"
     
     print(print_str+"Processing")
-    images_paths = image_info.get_extracted_files_path(extract_with_imagej=args.stitch)
-    z_stacks = oi.img_paths_to_zstack_classes(images_paths,segment_settings,categories)
+    z_stacks = image_info.get_z_stack(segment_settings,categories,extract_method=args.extract_method,max_projection = True)
     
     if len(masks)>0: 
         use_filter_masks = True
+        if args.verbose: print("Using filter masks")
     else: 
         use_filter_masks = False 
-    
-    new_z_stacks = []
-    for i in range(len(z_stacks)):
-        z_stacks[i] = z_stacks[i].get_max_projection_zstack(segment_settings)
-        if use_filter_masks:
+        if args.verbose: print("Not using filter masks")
+        
+    if use_filter_masks:
+        new_z_stacks = []
+        for i in range(len(z_stacks)):
             new_z_stacks = new_z_stacks + z_stacks[i].filter_w_mask(masks)
-    
-    if use_filter_masks: 
         z_stacks = new_z_stacks
     
     for i in range(len(z_stacks)): 

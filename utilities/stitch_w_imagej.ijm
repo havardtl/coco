@@ -10,6 +10,16 @@ print(arguments);
 print("in_path: "+in_path);
 print("out_path: "+out_path);
 
+if(indexOf(in_path," ")>-1){
+    print("in_path can't contain whitespace");
+    run("Quit");
+}
+if(indexOf(out_path," ")>-1){
+    print("out_path can't contain whitespace");
+    run("Quit");
+}
+
+
 open(in_path);
 run("Stack to Images");
 

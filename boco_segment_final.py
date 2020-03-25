@@ -99,6 +99,8 @@ def main(df,index,stacks,annotations,categories,annotations_folder):
     channel.check_annotation()
     if args.verbose: print("\tUpdating stats")
     channel.update_contour_stats()
+    if args.verbose: print("\tMeasure channel")
+    channel.measure_channels([channel])
     if args.verbose: print("\tMaking graphical segmentation")
     channel.make_img_with_contours(graphic_segmentation_path,auto_max = True,scale_bar = False,colorize = False,add_distance_centers = False,add_contour_numbs = False)
     if args.verbose: print("\tWriting annotation file")

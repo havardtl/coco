@@ -130,6 +130,8 @@ def main(index,image_numb,tot_images,stacks,categories):
     channel.classify_objects(single_objects_folder = args.out_single_organoids) 
     if args.verbose: print("\tUpdating contour stats")
     channel.update_contour_stats()
+    if args.verbose: print("\tMeasure channel")
+    channel.measure_channels([channel])
     if args.verbose: print("\tMaking image with contours")
     channel.make_img_with_contours(args.out_segmented_well,auto_max = True,scale_bar = False,colorize = False,add_distance_centers = False,add_contour_numbs = False)
     if args.verbose: print("\tWriting annotation file\n")
