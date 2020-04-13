@@ -14,6 +14,7 @@ Confocal counter (coco) that extracts information about objects from confocal im
 
 ## dependencies
 conda install opencv pandas openpyxl xlrd reportlab
+pip install aicspylibczi
 
 ### To get imagej to open files windowless: 
 1. Open FIJI2. Navigate to Plugins > Bio-Formats > Bio-Formats Plugins Configuration
