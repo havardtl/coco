@@ -45,7 +45,7 @@ if args.debug:
 if args.verbose: 
     oi.VERBOSE = True
     classes.VERBOSE = True
-    print("Running boco_segment_final.py in verbose mode")
+    print("Running boco_segment_final.py in verbose mode",flush=True)
     
 ##############################
 # Run program
@@ -64,9 +64,9 @@ df["image_numb"] = list(range(1,len(df.index)+1))
 if not args.n_process is None:
     df.sort_index(axis="index",inplace = True)
     df = df.iloc[0:args.n_process,]
-    if args.verbose: print("Only selecting "+str(args.n_process)+" images, as set with --n_process")
+    if args.verbose: print("Only selecting "+str(args.n_process)+" images, as set with --n_process",flush=True)
 
-print("Found "+str(len(df.index))+" images. Of which "+str(df["manually_reviewed"].sum())+" is already reviewed")
+print("Found "+str(len(df.index))+" images. Of which "+str(df["manually_reviewed"].sum())+" is already reviewed",flush=True)
 
 annotations = []
 if os.path.exists(args.annotations): 
@@ -79,7 +79,7 @@ if os.path.exists(args.annotations):
 
 def main(df,index,stacks,annotations,categories,annotations_folder):
     if args.verbose: print("")
-    print(str(df.loc[index,'image_numb'])+"/"+str(len(df.index))+"\tid: "+index + "\tProcessing image")
+    print(str(df.loc[index,'image_numb'])+"/"+str(len(df.index))+"\tid: "+index + "\tProcessing image",flush=True)
    
     min_projection_name = df.loc[index,"file_image"]
     min_projection_path = os.path.join(df.loc[index,"root_image"],min_projection_name)
@@ -89,21 +89,21 @@ def main(df,index,stacks,annotations,categories,annotations_folder):
     
     channel = classes.Channel(min_projection_path,channel_index = 0,z_index = 0,color = (255,255,255),categories = categories)
     channel.mask = edges
-    if args.verbose: print("\tFinding contours")
+    if args.verbose: print("\tFinding contours",flush=True)
     channel.find_contours()
     if args.verbose: print("\tAdding annotations")
-    channel.add_annotation(annotations,match_file_id=True)
-    if args.verbose: print("\tSplitting on annotations")
+    channel.add_annotation(annotations,match_file_id=True,flush=True)
+    if args.verbose: print("\tSplitting on annotations",flush=True)
     channel.split_on_annotations()
-    if args.verbose: print("\tChecking annotations")
+    if args.verbose: print("\tChecking annotations",flush=True)
     channel.check_annotation()
-    if args.verbose: print("\tUpdating stats")
+    if args.verbose: print("\tUpdating stats",flush=True)
     channel.update_contour_stats()
-    if args.verbose: print("\tMeasure channel")
+    if args.verbose: print("\tMeasure channel",flush=True)
     channel.measure_channels([channel])
-    if args.verbose: print("\tMaking graphical segmentation")
+    if args.verbose: print("\tMaking graphical segmentation",flush=True)
     channel.make_img_with_contours(graphic_segmentation_path,auto_max = True,scale_bar = False,colorize = False,add_distance_centers = False,add_contour_numbs = False)
-    if args.verbose: print("\tWriting annotation file")
+    if args.verbose: print("\tWriting annotation file",flush=True)
     channel.write_annotation_file(annotations_folder,add_to_changelog = "Segmented_post_manual")
    
 if args.cores is None:

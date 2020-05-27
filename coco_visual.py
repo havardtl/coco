@@ -35,7 +35,7 @@ else:
     from_first = ""
 
 if not os.path.exists(args.session_file): 
-    print("Session file does not exist. Creating one in: "+args.session_file)
+    print("Session file does not exist. Creating one in: "+args.session_file,flush=True)
     os.makedirs(args.annotations,exist_ok=True)
     img_files = os.listdir(args.projections)
     
@@ -51,7 +51,7 @@ if not os.path.exists(args.session_file):
             if keep: 
                 imgs_keep.append(img_files[i])
         
-        print("Found {n_pre} images. Only keeping those that have string: {f}, giving {n_post} images.".format(n_pre=len(img_files),f=filters,n_post=len(imgs_keep)))
+        print("Found {n_pre} images. Only keeping those that have string: {f}, giving {n_post} images.".format(n_pre=len(img_files),f=filters,n_post=len(imgs_keep)),flush=True)
         img_files = imgs_keep
         
     if len(img_files) < 1: 
@@ -74,6 +74,6 @@ if not os.path.exists(args.session_file):
     df.to_csv(args.session_file,index=False)
 
 cmd = "boco_visual.py --session_file {s_f} --height {h} --zoom {z} --epsilon {e} --categories '{c}'{f_f}".format(s_f=args.session_file,h=args.height,z=args.zoom,e=args.epsilon,f_f=from_first,c=args.categories)
-print(cmd)
+print(cmd,flush=True)
 os.system(cmd)
 

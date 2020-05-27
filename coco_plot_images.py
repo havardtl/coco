@@ -75,7 +75,7 @@ for i in os.listdir(args.raw_data):
     raw_imgs.append(img_i)
 raw_imgs.sort()
 
-print("Found {n_files} to process".format(n_files = len(raw_imgs)))
+print("Found {n_files} to process".format(n_files = len(raw_imgs)),flush=True)
 
 categories = classes.Categories.load_from_file(args.categories)
 
@@ -95,11 +95,11 @@ def main(image_info,info,segment_settings,categories):
     '''
     global args
 
-    print(info+"\traw_img_path: "+image_info.raw_path+"\t Making projections")
+    print(info+"\traw_img_path: "+image_info.raw_path+"\t Making projections",flush=True)
     
     images_paths = image_info.get_extracted_files_path(extract_method="aicspylibczi",max_projection = True)
 
-    if args.verbose: print("Getting info about z_stacks: ")
+    if args.verbose: print("Getting info about z_stacks: ",flush=True)
     df = pd.DataFrame()
     
     z_stacks = image_info.get_z_stack(segment_settings,categories,extract_method="aicspylibczi",max_projection = True)
@@ -109,14 +109,14 @@ def main(image_info,info,segment_settings,categories):
             z.print_all()
         z.make_projections(save_folder = args.projections_raw_folder)
         df = pd.concat([df,z.get_projections_data()],ignore_index=True)
-    if args.verbose: print(df)
+    if args.verbose: print(df,flush=True)
     
     return df
 
 if os.path.exists(pickle_path): 
     with open(pickle_path,'rb') as f: 
         df = pickle.load(f)
-    print("Loading info from previously made pickle object: "+pickle_path)
+    print("Loading info from previously made pickle object: "+pickle_path,flush=True)
 else: 
     if args.cores is None:
         cores = mp.cpu_count()-1
@@ -148,18 +148,18 @@ else:
         
     with open(pickle_path,"wb") as f: 
         pickle.dump(df,f)
-    print("Wrote info about extracted images to pickle: "+pickle_path)
+    print("Wrote info about extracted images to pickle: "+pickle_path,flush=True)
 
-print(type(df))
-print(df["img_dim"].mode())
+print(type(df),flush=True)
+print(df["img_dim"].mode(),flush=True)
 
 most_common_img_dim = str(df["img_dim"].mode()[0])
 image_dim_goal = oi.img_dim_str_to_tuple(most_common_img_dim)
 image_dim_goal = (int(image_dim_goal[0]),int(image_dim_goal[1]))
 
-print("Adding annotation info from: "+args.annotation_file)
+print("Adding annotation info from: "+args.annotation_file,flush=True)
 annotation = pd.read_excel(args.annotation_file,sheet_name = classes.ANNOTATION_SHEET)
-print(annotation)
+print(annotation,flush=True)
 annotation.drop("full_path",axis="columns",inplace=True)
 df = df.merge(annotation,on="file_id",how="left")
 
@@ -167,7 +167,7 @@ plot_vars = pd.read_excel(args.annotation_file,sheet_name = classes.PLOT_VARS_SH
 
 df["pdf_file"] = os.path.splitext(os.path.split(args.annotation_file)[1])[0]
 
-print("Making pdf from this info:")
+print("Making pdf from this info:",flush=True)
 print(df)
 
 file_vars = ["pdf_file"] + list(plot_vars.loc[plot_vars["plot_axis"]=="file","variable"]) 

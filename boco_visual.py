@@ -248,7 +248,7 @@ class Current_Img():
         self.img_path,self.annot_path = self.session.get_img_and_annot_paths()
         self.load_annotation()
         self.zoomed_img = Zoomed_Img(self.img_path,self.window_height,self.zoom_level)
-        print(self.session.get_counter()+"\t"+self.annot_path + "\t is displayed")
+        print(self.session.get_counter()+"\t"+self.annot_path + "\t is displayed",flush=True)
     
     def update(self,change):
         '''
@@ -271,7 +271,7 @@ class Current_Img():
             
             self.zoomed_img = Zoomed_Img(self.img_path,self.window_height,self.zoom_level)
             
-        print(self.session.get_counter()+"\t"+self.annot_path + "\t is displayed")
+        print(self.session.get_counter()+"\t"+self.annot_path + "\t is displayed",flush=True)
     
     def save_all(self): 
         # Save annotations and session file
@@ -335,7 +335,7 @@ class Current_Img():
     def save_annotation(self):
         #Save annotation file
         classes.Annotation.write_annotation_file(self.annot_path,self.reviewed_by_human,self.changelog,self.annotation,self.next_object_id)
-        print("\tSaved annotation to "+self.annot_path)
+        print("\tSaved annotation to "+self.annot_path,flush=True)
         
     def load_annotation(self):
         #Load annotation file 
@@ -392,9 +392,9 @@ class Session():
         self.session_file = session_file
         self.main_folder = os.path.split(self.session_file)[0]
         
-        print("Loading session file from: "+self.session_file)
+        print("Loading session file from: "+self.session_file,flush=True)
         self.df = pd.read_csv(self.session_file)
-        print("Found "+str(len(self.df.index))+" images. Of wich "+str(self.df["manually_reviewed"].sum())+" is already reviewed")
+        print("Found "+str(len(self.df.index))+" images. Of wich "+str(self.df["manually_reviewed"].sum())+" is already reviewed",flush=True)
         
         if from_first: 
             self.index = self.df.index[0]
@@ -442,7 +442,7 @@ class Session():
     def save_session_file(self,verbose=False):
         #Save session file to session file path
         self.df.to_csv(self.session_file,index=False)
-        if verbose: print("\tSaved session file to "+str(self.session_file))
+        if verbose: print("\tSaved session file to "+str(self.session_file),flush=True)
         
     def get_counter(self):
         # Return string describing which image we are on

@@ -14,14 +14,11 @@ import xml.etree.ElementTree as ET
 #TODO: Manual corrections should point to a new annotation file, not edit the old one. 
 
 #TODO: all functionality should happen in channel class. Z-stack and Image should be wrappers to add additonal functionality on top of that. 
-
-def load_neural_network(): 
-    import utilities.neural_network.type_predict as ai 
-
-sys.setrecursionlimit(10**6) 
-
+    
 VERBOSE = False 
 WARNINGS = True
+
+sys.setrecursionlimit(10**6) 
 
 TEMP_FOLDER = "coco_temp"
 CONTOURS_STATS_FOLDER = "contour_stats"
@@ -256,28 +253,28 @@ class Image_czi:
         channels = list(range(dims['C'][1]))
         z_indexes = list(range(dims['Z'][1]))
         
-        if czi.is_mosaic(): 
-            for c in channels: 
-                img_projection = None 
-                for z in z_indexes: 
-                    img = czi.read_mosaic(C=c,Z=z,scale_factor=1)
-                    img = np.squeeze(img)
-                    if not max_projection: 
-                        out_path = out_path.join(self.extracted_folder,self.file_id + "_INFO_0_0_"+str(z)+"_"+str(c)+self.file_ending)
-                        if VERBOSE: print("\tChannel: "+str(c)+"/"+str(max(channels))+"\tZ_index: "+str(z)+"/"+str(max(z))+"\tWriting: "+out_path)
-                        cv2.imwrite(out_path,img)
+        #if czi.is_mosaic(): 
+        for c in channels: 
+            img_projection = None 
+            for z in z_indexes: 
+                img = czi.read_mosaic(C=c,Z=z,scale_factor=1)
+                img = np.squeeze(img)
+                if not max_projection: 
+                    out_path = out_path.join(self.extracted_folder,self.file_id + "_INFO_0_0_"+str(z)+"_"+str(c)+self.file_ending)
+                    if VERBOSE: print("\tChannel: "+str(c)+"/"+str(max(channels))+"\tZ_index: "+str(z)+"/"+str(max(z))+"\tWriting: "+out_path)
+                    cv2.imwrite(out_path,img)
+                else: 
+                    if img_projection is None: 
+                        img_projection = img
                     else: 
-                        if img_projection is None: 
-                            img_projection = img
-                        else: 
-                            img_projection = np.maximum(img_projection,img)
-                if max_projection:
-                    out_path = os.path.join(self.extracted_folder,self.file_id + "_INFO_0_0_0_"+str(c)+self.file_ending)
-                    if VERBOSE: print("\tChannel: "+str(c)+"/"+str(max(channels))+"\tWriting: "+out_path)
-                    cv2.imwrite(out_path,img_projection)
+                        img_projection = np.maximum(img_projection,img)
+            if max_projection:
+                out_path = os.path.join(self.extracted_folder,self.file_id + "_INFO_0_0_0_"+str(c)+self.file_ending)
+                if VERBOSE: print("\tChannel: "+str(c)+"/"+str(max(channels))+"\tWriting: "+out_path)
+                cv2.imwrite(out_path,img_projection)
                 
-        else: 
-            raise ValueError("Have not yet implemented not mosaic file")
+        #else: 
+        #    raise ValueError("Have not yet implemented not mosaic file")
             #TODO
         
         self.meta_xml_to_file(czi,os.path.join(self.extracted_folder,"meta_data.txt"))
@@ -1863,6 +1860,8 @@ class Channel:
         Params
         single_objects_folder : str : if supplied, images used for neural network are saved here
         '''
+        import utilities.neural_network.type_predict as ai 
+        
         objects = []
         for c in self.contours: 
             only_object = c.get_only_object(self,box_size = 120)

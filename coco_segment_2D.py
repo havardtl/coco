@@ -86,7 +86,7 @@ classes.CONTOURS_STATS_FOLDER = args.out_contours
 classes.TEMP_FOLDER = args.temp_folder 
 classes.GRAPHICAL_SEGMENTATION_FOLDER = args.out_graphical
 
-print("Found {n_files} to process".format(n_files = len(raw_imgs)))
+print("Found {n_files} to process".format(n_files = len(raw_imgs)),flush=True)
 segment_settings = oi.excel_to_segment_settings(args.settings_file)
 
 categories = classes.Categories.load_from_file(args.categories)
@@ -96,7 +96,7 @@ if os.path.exists(args.annotations):
     annotation_files = os.listdir(args.annotations)
     for a in annotation_files: 
         annotations.append(classes.Annotation.load_from_file(os.path.join(args.annotations,a),categories))
-    if args.verbose: print("Found "+str(len(annotations))+ " annotation files")
+    if args.verbose: print("Found "+str(len(annotations))+ " annotation files",flush=True)
 
 masks = classes.Mask.get_mask_list(args.masks)
 
@@ -115,15 +115,15 @@ def main(image_info,segment_settings,annotations,masks,info,categories):
     global args
     print_str = str(info)+"\traw_img_path: "+str(image_info.raw_path)+"\t"
     
-    print(print_str+"Processing")
+    print(print_str+"Processing",flush=True)
     z_stacks = image_info.get_z_stack(segment_settings,categories,extract_method=args.extract_method,max_projection = True)
     
     if len(masks)>0: 
         use_filter_masks = True
-        if args.verbose: print("Using filter masks")
+        if args.verbose: print("Using filter masks",flush=True)
     else: 
         use_filter_masks = False 
-        if args.verbose: print("Not using filter masks")
+        if args.verbose: print("Not using filter masks",flush=True)
         
     if use_filter_masks:
         new_z_stacks = []

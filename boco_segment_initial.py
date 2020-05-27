@@ -41,7 +41,7 @@ import pandas as pd
 import utilities.image_processing_functions as oi
 import utilities.classes as classes
 
-classes.load_neural_network()
+#classes.load_neural_network()
 ########################
 # setup 
 ########################
@@ -105,10 +105,10 @@ def main(index,image_numb,tot_images,stacks,categories):
     
     if (os.path.isfile(os.path.join(args.out_annotations,annotation_name))):
         if not args.overwrite:
-            print(print_info + "\t did nothing, annotation already exist")
+            print(print_info + "\t did nothing, annotation already exist",flush=True)
             return image_info
 
-    print(print_info+ "\t finding annotation centers ")
+    print(print_info+ "\t finding annotation centers ",flush=True)
     now = datetime.datetime.now()
     today = now.strftime("%Y-%m-%d-%H:%M")
     changelog = today+" segmented_images\n"
@@ -120,21 +120,21 @@ def main(index,image_numb,tot_images,stacks,categories):
     
     channel = classes.Channel(min_projection_path,channel_index = 0,z_index = 0,color = (255,255,255),categories = categories)
     channel.mask = edges
-    if args.verbose: print("\tFinding contours")
+    if args.verbose: print("\tFinding contours",flush=True)
     channel.find_contours(min_contour_area = args.minimum_size)
-    if args.verbose: print("\tSplitting contours")
+    if args.verbose: print("\tSplitting contours",flush=True)
     channel.split_contours()
-    if args.verbose: print("\tFinding distance centers")
+    if args.verbose: print("\tFinding distance centers",flush=True)
     channel.find_distance_centers(erode = None,halo = None,min_size = None)
-    if args.verbose: print("\tClassifying objects")
+    if args.verbose: print("\tClassifying objects",flush=True)
     channel.classify_objects(single_objects_folder = args.out_single_organoids) 
-    if args.verbose: print("\tUpdating contour stats")
+    if args.verbose: print("\tUpdating contour stats",flush=True)
     channel.update_contour_stats()
-    if args.verbose: print("\tMeasure channel")
+    if args.verbose: print("\tMeasure channel",flush=True)
     channel.measure_channels([channel])
-    if args.verbose: print("\tMaking image with contours")
+    if args.verbose: print("\tMaking image with contours",flush=True)
     channel.make_img_with_contours(args.out_segmented_well,auto_max = True,scale_bar = False,colorize = False,add_distance_centers = False,add_contour_numbs = False)
-    if args.verbose: print("\tWriting annotation file\n")
+    if args.verbose: print("\tWriting annotation file\n",flush=True)
     channel.write_annotation_file(args.out_annotations,add_to_changelog = "Initial segmentation")
      
     return image_info

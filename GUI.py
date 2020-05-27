@@ -68,7 +68,7 @@ class mainWindow:
             cmd = "python \"{o}\" --session_file \"{f}\" --height {s}".format(o=self.coco_visual_path,f=self.session_file,s=self.scale_image)
         if self.from_first: 
             cmd = cmd + " --from_first"
-        print(cmd)
+        print(cmd,flush=True)
         exit_val = os.system(cmd)
         if exit_val != 0: 
             mbox.showerror("The visual editor had an error","Command did not finish properly! Check command output.")

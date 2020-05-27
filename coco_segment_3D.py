@@ -87,7 +87,7 @@ classes.CONTOURS_STATS_FOLDER = args.out_contours
 classes.TEMP_FOLDER = args.temp_folder 
 classes.GRAPHICAL_SEGMENTATION_FOLDER = args.out_graphical
 
-print("Found {n_files} to process".format(n_files = len(raw_imgs)))
+print("Found {n_files} to process".format(n_files = len(raw_imgs)),flush=True)
 segment_settings = oi.excel_to_segment_settings(args.settings_file)
 
 if args.stitch: 
@@ -101,7 +101,7 @@ if os.path.exists(args.annotations):
     annotation_files = os.listdir(args.annotations)
     for a in annotation_files: 
         annotations.append(classes.Annotation.load_from_file(os.path.join(args.annotations,a),categories))
-    if args.verbose: print("Found "+str(len(annotations))+ " annotation files")
+    if args.verbose: print("Found "+str(len(annotations))+ " annotation files",flush=True)
 
 def main(image_info,segment_settings,annotations,info):
     '''
@@ -120,9 +120,9 @@ def main(image_info,segment_settings,annotations,info):
     print_str = str(info)+"\traw_img_path: "+str(image_info.raw_path)+"\t"
     
     if os.path.exists(df_rois_path): 
-        print(print_str+"3D ROIs already made, skipping this file")
+        print(print_str+"3D ROIs already made, skipping this file",flush=True)
     else:
-        print(print_str+"Making 3D rois")
+        print(print_str+"Making 3D rois",flush=True)
         if not os.path.isfile(image_info.pickle_path): 
             images_paths = image_info.get_extracted_files_path(extract_with_imagej=args.stitch)
             z_stacks = oi.img_paths_to_zstack_classes(images_paths,segment_settings)
@@ -141,13 +141,13 @@ def main(image_info,segment_settings,annotations,info):
                 if args.verbose: z.print_all()
                 try: 
                     with open(image_info.pickle_path, 'wb') as handle:
-                        if args.verbose: print("Writing pickle object")
+                        if args.verbose: print("Writing pickle object",flush=True)
                         pickle.dump(z_stacks, handle, protocol=pickle.HIGHEST_PROTOCOL)
                 except: 
                     os.remove(image_info.pickle_path)
-                    print("Could not write pickle object")
+                    print("Could not write pickle object",flush=True)
         else: 
-            if args.verbose: print("Reading z_stacks info from pickle file: "+image_info.pickle_path)
+            if args.verbose: print("Reading z_stacks info from pickle file: "+image_info.pickle_path,flush=True)
             with open(image_info.pickle_path, 'rb') as handle:
                 z_stacks = pickle.load(handle)
         
@@ -158,15 +158,15 @@ def main(image_info,segment_settings,annotations,info):
                 rois_3d.append(roi)
         
         df_rois = pd.DataFrame()
-        if args.verbose: print("Building 3D rois")
+        if args.verbose: print("Building 3D rois",flush=True)
         for i in range(len(rois_3d)): 
             if args.verbose: oi.print_percentage(i,len(rois_3d),10)
             rois_3d[i].build()
             df_rois = df_rois.append(rois_3d[i].data,ignore_index=True,sort=False)
         
         if args.verbose: 
-            print("Writing df_rois to path: "+df_rois_path)
-            print(df_rois)
+            print("Writing df_rois to path: "+df_rois_path,flush=True)
+            print(df_rois,flush=True)
         df_rois.to_csv(df_rois_path,sep=";",index=False)
         
         for z in z_stacks: 

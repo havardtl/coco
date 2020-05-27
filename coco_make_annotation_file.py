@@ -34,7 +34,7 @@ def strip_lines(string):
 ########################
 # Script 
 ########################
-print("Making annotation file: "+args.annotation_file)
+print("Making annotation file: "+args.annotation_file,flush=True)
 
 file_id = os.listdir(args.raw_data)
 raw_files = []
@@ -59,7 +59,7 @@ while folder.count("/")>1 and not exp_setup_file is not None:
     folder = os.path.split(folder)[0]
 
 if exp_setup_file is not None:
-    print("Adding info from: "+exp_setup_file)
+    print("Adding info from: "+exp_setup_file,flush=True)
     #Process exp_setup file and read to data frame
     with open(exp_setup_file) as f: 
         exp_setup_raw = f.read()
@@ -97,10 +97,10 @@ if exp_setup_file is not None:
         df.drop("stain_group",axis="columns",inplace=True)
     if "is_control" in exp_df.columns:
         df.drop("is_control",axis="columns",inplace=True)
-    print(exp_df)
+    print(exp_df,flush=True)
     df = df.merge(exp_df,on="well_id",how="left")
     
-print(df)
+print(df,flush=True)
 
 #Make sheet with plotting information for all variables
 always_present = ["id_channel","channel_index","time_index" ,"series_index","img_dim"]
@@ -134,5 +134,5 @@ with pd.ExcelWriter(args.annotation_file) as writer:
     test_settings.to_excel(writer,sheet_name=classes.TEST_SETTINGS_SHEET,index=False)
     segment_settings.to_excel(writer,sheet_name=classes.SEGMENT_SETTINGS_SHEET,index=False)
 
-print("Wrote annotation info to: "+args.annotation_file)
+print("Wrote annotation info to: "+args.annotation_file,flush=True)
 

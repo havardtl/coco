@@ -66,7 +66,7 @@ classes.TEMP_FOLDER = args.temp_folder
 
 if os.path.isdir(args.raw_data): 
     raw_imgs = os.listdir(args.raw_data)
-    print("Found {n} files in raw folder".format(n = len(raw_imgs)))
+    print("Found {n} files in raw folder".format(n = len(raw_imgs)),flush=True)
 
     raw_imgs.sort()
     raw_img_path = os.path.join(args.raw_data,raw_imgs[0])
@@ -75,7 +75,7 @@ elif os.path.isfile(args.raw_data):
 else: 
     raise ValueError("--raw_data did not supply a valid path or folder")
 
-print("Processing image: "+raw_img_path)
+print("Processing image: "+raw_img_path,flush=True)
 
 img_id = os.path.splitext(os.path.split(raw_img_path)[1])[0]
 
@@ -83,23 +83,23 @@ extracted_images_folder_this_img = os.path.join(args.extracted_images_folder,img
 
 images_paths_file = "files_info.txt"
 if os.path.isfile(os.path.join(extracted_images_folder_this_img,images_paths_file)): 
-    print("Images already extracted from raw files, using those.")
+    print("Images already extracted from raw files, using those.",flush=True)
     with open(os.path.join(extracted_images_folder_this_img,images_paths_file),'r') as f: 
         images_paths = f.read().splitlines()
 else:
-    print("Extracting images...")
+    print("Extracting images...",flush=True)
     images_paths = oi.get_images_bfconvert(raw_img_path,extracted_images_folder_this_img,images_paths_file,args.verbose)
 
-if args.verbose: print("loading segment settings from "+args.annotation_file)
+if args.verbose: print("loading segment settings from "+args.annotation_file,flush=True)
 segment_settings = oi.excel_to_segment_settings(args.annotation_file)
 
-if args.verbose: print("Converting image paths to channels.",end = " ")
+if args.verbose: print("Converting image paths to channels.",end = " ",flush=True)
 channels = oi.img_paths_to_channel_classes(images_paths,segment_settings)
 
-if args.verbose: print("Making test settings from file: "+str(args.annotation_file))
+if args.verbose: print("Making test settings from file: "+str(args.annotation_file),flush=True)
 order = ["contrast","auto_max","open_kernel","close_kernel","thresh_type","thresh_upper","thresh_lower"]
 test_settings = oi.make_test_settings(args.annotation_file,order)
-print("Made {n} test settings".format(n=len(test_settings)))
+print("Made {n} test settings".format(n=len(test_settings)),flush=True)
 
 df = pd.DataFrame({"channel":channels,"z_toshow":False,"z_index":None})
 
@@ -118,10 +118,10 @@ for i in df.index:
         df.loc[i,"z_toshow"] = True
 df["channel_index"] = df["channel_index"].astype(int)
 
-print("Out of {tot_z} z_slices we are displaying {n}".format(tot_z = len(df.index),n = sum(df["z_toshow"])))
+print("Out of {tot_z} z_slices we are displaying {n}".format(tot_z = len(df.index),n = sum(df["z_toshow"])),flush=True)
 
 df = df.loc[df["z_toshow"],]
-print(df)
+print(df,flush=True)
 
 for i in df.index: 
     df.loc[i,"img_dim"] = str(df.loc[i,"channel"].get_image().shape)
@@ -136,7 +136,7 @@ for i in df["channel_index"].unique():
     this_channel = df.loc[df["channel_index"]==i,]
 
     pdf_save_path = os.path.join(pdf_save_folder,img_id+"_C"+str(i)+".pdf")
-    print("Making PDF: "+pdf_save_path) 
+    print("Making PDF: "+pdf_save_path,flush=True) 
 
     pdf_imgs = []
     x = 0
