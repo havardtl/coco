@@ -1072,7 +1072,7 @@ class Zstack:
                 x = 1
                 data["type"] = "w_contours"
                 data["auto_max"] = True
-                j.make_img_with_contours(self.img_w_contour_folder,scale_bar = True,auto_max = True,colorize=True,add_contour_numbs=False)
+                j.make_img_with_contours(self.img_w_contour_folder,scale_bar = True,auto_max = True,colorize=True,add_contour_numbs=True)
                 pdf_imgs[j.channel_index+1].append(Image_in_pdf(x,y,j.img_w_contour_path,data.copy(),x_vars,y_vars,image_vars,processed_folder,self.img_dim))
                 
                 pdf_imgs_channel[j.channel_index+1] = j.id_channel
@@ -1088,7 +1088,7 @@ class Zstack:
             data["type"] = "w_contours"
             data["auto_max"] = None
             data["channel_id"] = -1
-            i.combined_mask.make_img_with_contours(self.img_w_contour_folder,scale_bar = False,auto_max=False,colorize=True,add_contour_numbs=False)
+            i.combined_mask.make_img_with_contours(self.img_w_contour_folder,scale_bar = False,auto_max=False,colorize=True,add_contour_numbs=True)
             pdf_imgs[0].append(Image_in_pdf(x,y,i.combined_mask.img_w_contour_path,data.copy(),x_vars,y_vars,image_vars,processed_folder,self.img_dim))
             
             pdf_imgs_channel[0] = i.combined_mask.id_channel
@@ -2966,9 +2966,8 @@ class Annotation:
         Returns
         annotation : Annotation : Annotation object with file information
         '''
-        
         reviewed_by_human,changelog,df,next_object_id = Annotation.read_annotation_file(path)
-
+        
         file_id = os.path.splitext(os.path.split(path)[1])[0]
         
         annotation = Annotation(file_id,df,reviewed_by_human,categories,changelog)

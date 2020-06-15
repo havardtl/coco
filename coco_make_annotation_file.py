@@ -103,8 +103,8 @@ if exp_setup_file is not None:
 print(df,flush=True)
 
 #Make sheet with plotting information for all variables
-always_present = ["id_channel","channel_index","time_index" ,"series_index","img_dim"]
-plot_axis      = ["x"         , None      ,"y"    ,"y"     ,None     ]
+always_present = ["id_channel","channel_index","time_index" ,"series_index","img_dim"] #TODO: should id_channel be deleted?
+plot_axis      = [None        ,"x"            ,"y"          ,"y"     ,None     ]
 importance     = [1           ,0          ,0      ,2       ,0        ]
 in_annotation  = list(df.columns)
 
