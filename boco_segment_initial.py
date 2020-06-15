@@ -52,7 +52,8 @@ if args.debug:
 
 if args.verbose: 
     oi.VERBOSE = True
-    print("Running ORGAI_segment_final.py in verbose mode")
+    print("Running boco_segment_initial.py in verbose mode")
+    print("opencv version: "+str(cv2.__version__))
 
 ##############################
 # Run program
