@@ -1,5 +1,5 @@
 # coco
-Confocal counter (coco) that extracts information about objects from confocal images. coco also contains a sister version for analyzing brightfield organoid images called boco. 
+Confocal counter (coco) is a program that extracts information about objects from confocal images. coco also contains a sister version for analyzing brightfield organoid images called boco. 
 
 coco was designed to analyze confocal images of small intestinal organoids. Specifically, it is implemented to count the number of tuft cells per organoid as well as extracting size information about each organoid, but it should be useful for other types of quantification as well.
 
@@ -13,8 +13,8 @@ Lindholm et al. (June 2020). "Developmental pathways regulate cytokine-driven ef
 Use this program at your own risk. This repository is not actively maintained, but you are welcome to open an issue and I might look at it.  
 
 ## Dependencies
-All image analysis in coco is based upon openCV 4. It is easiest to install all packages necessary with conda. You can utilize the environment file environment.yml to get a copy of my environment. Alternatively, as of June 2020 I had success using python 3.6 using the following command: 
-
+It is recommended to install dependencies with conda. You can utilize the environment file environment.yml to get a copy of my environment. Alternatively, I had success with python 3.6 using the following commands: 
+`conda config --add channels conda-forge`
 `conda install opencv pandas openpyxl xlrd reportlab`
 
 I used .czi files from ZEISS for confocal image analysis. These where imported using the aicspylibczi library which can be installed with:
