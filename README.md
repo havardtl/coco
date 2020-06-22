@@ -14,7 +14,9 @@ Use this program at your own risk. This repository is not actively maintained, b
 
 ## Dependencies
 It is recommended to install dependencies with conda. You can utilize the environment file environment.yml to get a copy of my environment. Alternatively, I had success with python 3.6 using the following commands: 
+
 `conda config --add channels conda-forge`
+
 `conda install opencv pandas openpyxl xlrd reportlab`
 
 I used .czi files from ZEISS for confocal image analysis. These where imported using the aicspylibczi library which can be installed with:
