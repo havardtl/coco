@@ -1,0 +1,4 @@
+raw/extracted_raw/HL17_1_d02_A1_1_20X/HL17_1_d02_A1_1_20X_INFO_0_0_0_0.tiff
+raw/extracted_raw/HL17_1_d02_A1_1_20X/HL17_1_d02_A1_1_20X_INFO_0_0_0_1.tiff
+raw/extracted_raw/HL17_1_d02_A1_1_20X/HL17_1_d02_A1_1_20X_INFO_0_0_0_2.tiff
+raw/extracted_raw/HL17_1_d02_A1_1_20X/HL17_1_d02_A1_1_20X_INFO_0_0_0_3.tiff

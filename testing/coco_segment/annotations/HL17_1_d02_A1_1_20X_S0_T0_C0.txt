@@ -1,0 +1,11 @@
+reviewed_by_human = True
+next_object_id = 4
+--changelog--
+2020-06-23-09:46 manually_reviewed
+2020-06-23-11:38 manually_reviewed
+--organoids--
+center_x;center_y;type;object_id
+148.66962962962958;191.14666666666665;Tuft_cell;0
+163.84;194.93925925925927;Tuft_cell;1
+155.11703703703702;207.8340740740741;Tuft_cell;2
+141.08444444444444;201.00740740740738;Tuft_cell;3

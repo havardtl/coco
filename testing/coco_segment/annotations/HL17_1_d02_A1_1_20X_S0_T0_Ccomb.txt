@@ -1,0 +1,11 @@
+reviewed_by_human = True
+next_object_id = 9
+--changelog--
+2020-06-23-09:46 manually_reviewed
+2020-06-23-11:38 manually_reviewed
+--organoids--
+center_x;center_y;type;object_id;id;source
+8.343703703703703;395.94666666666666;Spheroid;4;HL17_1_d02_A1_1_20X_S0_T0_Ccomb;manual
+153.97925925925927;201.76592592592593;Budding;6;HL17_1_d02_A1_1_20X_S0_T0_Ccomb;manual
+292.0296296296296;360.2962962962963;Spheroid;7;HL17_1_d02_A1_1_20X_S0_T0_Ccomb;manual
+274.96296296296293;401.2562962962963;Spheroid;8;HL17_1_d02_A1_1_20X_S0_T0_Ccomb;manual

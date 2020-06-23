@@ -1,0 +1,11 @@
+ScalingX	1.3837763957529833e-006
+ScalingY	1.3837763957529833e-006
+ScalingZ	1.1e-005
+Dye	Alexa Fluor 488
+Dye	Alexa Fluor 647
+Dye	DAPI
+Dye	Rhodamine Red-X
+ImageChannelName	ChS1
+ImageChannelName	Ch2
+ImageChannelName	Ch1
+ImageChannelName	ChS2

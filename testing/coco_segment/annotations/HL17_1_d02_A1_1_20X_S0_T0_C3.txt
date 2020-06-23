@@ -1,0 +1,9 @@
+reviewed_by_human = True
+next_object_id = 2
+--changelog--
+2020-06-23-09:46 manually_reviewed
+2020-06-23-11:38 manually_reviewed
+--organoids--
+center_x;center_y;type;object_id
+150.94518518518518;196.45629629629627;Goblet_cell;0
+152.46222222222218;213.1437037037037;Goblet_cell;1
