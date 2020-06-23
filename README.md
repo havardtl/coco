@@ -12,7 +12,7 @@ Lindholm et al. (June 2020). "Developmental pathways regulate cytokine-driven ef
 
 Use at your own risk. This repository is not actively maintained, but you are welcome to open an issue and I might look at it.  
 
-## Dependencies
+## Installation
 It is recommended to install dependencies with conda. You can utilize the environment file environment.yml to get a copy of my environment. Alternatively, I had success with python 3.6 using the following commands: 
 
 `conda config --add channels conda-forge`
