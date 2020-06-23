@@ -52,7 +52,6 @@ ilastic can achieve a lot of the same image segmentation and classification as b
 - Put as much as possible of the code into functions with comments. 
 - Simplify scripts into main commands "coco" and "boco" with sup-options
 - Write jupiter notebook with example of usage. 
-- Change default output of projections to add each object number
 - Add possibility to add manual annotation of organoids and other annotations
 - Add log file for each run so that you know settings used to segment. (git log -1 --format="%H" gives commit hash)
 
