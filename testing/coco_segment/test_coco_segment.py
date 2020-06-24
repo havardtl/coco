@@ -112,6 +112,8 @@ check_value("spheroid_in_Ccomb",sum(Ccomb["annotation_this_channel_type"]=="Sphe
 check_value("biggest_eq_radius_Ccomb",Ccomb["equivalent_radius"].max(),25,checked_values,0.5)
 check_value("smallest_eq_radius_Ccomb",Ccomb["equivalent_radius"].min(),18,checked_values,0.5)
 
+#TODO: adds checks for signal from other channel
+
 budding = Ccomb.loc[Ccomb["annotation_this_channel_type"].str.contains("Budding")]
 check_value("budding_size",float(budding["equivalent_radius"]),25,checked_values,0.5)
 check_value("budding_Tufts",float(budding["annotation_other_channel_type"].str.count("Tuft_cell")),4,checked_values,0.5)

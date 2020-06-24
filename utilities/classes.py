@@ -262,7 +262,8 @@ class Image_czi:
                 if not max_projection: 
                     out_path = out_path.join(self.extracted_folder,self.file_id + "_INFO_0_0_"+str(z)+"_"+str(c)+self.file_ending)
                     if VERBOSE: print("\tChannel: "+str(c)+"/"+str(max(channels))+"\tZ_index: "+str(z)+"/"+str(max(z))+"\tWriting: "+out_path)
-                    cv2.imwrite(out_path,img)
+                    if not cv2.imwrite(out_path,img):
+                        raise ValueError("Could not save image to: "+out_path)
                 else: 
                     if img_projection is None: 
                         img_projection = img
@@ -271,7 +272,8 @@ class Image_czi:
             if max_projection:
                 out_path = os.path.join(self.extracted_folder,self.file_id + "_INFO_0_0_0_"+str(c)+self.file_ending)
                 if VERBOSE: print("\tChannel: "+str(c)+"/"+str(max(channels))+"\tWriting: "+out_path)
-                cv2.imwrite(out_path,img_projection)
+                if not cv2.imwrite(out_path,img_projection):
+                    raise ValueError("Could not save image to: "+out_path)
                 
         #else: 
         #    raise ValueError("Have not yet implemented not mosaic file")
@@ -966,7 +968,8 @@ class Zstack:
             p.x_res = self.physical_size["x"]
             p.x_unit = self.physical_size["unit"]
             p.image = p.get_img_for_viewing(scale_bar=add_scale_bar,auto_max=auto_max,colorize=colorize,grayscale = grayscale)
-            cv2.imwrite(p.full_path,p.image)
+            if not cv2.imwrite(p.full_path,p.image):
+                raise ValueError("Could not save image to: "+p.full_path)
         
             if p.channel_index > max_channel_index: 
                 max_channel_index = p.channel_index
@@ -981,7 +984,8 @@ class Zstack:
                 composite_img = cv2.add(composite_img,p.get_image()) 
         
         new_channel_path = os.path.join(save_folder,self.id_z_stack+"_Ccomb.png")
-        cv2.imwrite(new_channel_path,composite_img)
+        if not cv2.imwrite(new_channel_path,composite_img):
+            raise ValueError("Could not save image to: "+new_channel_path)
         composite = Channel(new_channel_path,max_channel_index + 1,0,(255,255,255),j.categories)
         composite.id_channel = "Ccomb"
         composite.image = composite_img
@@ -1062,7 +1066,8 @@ class Zstack:
                 
                 img_for_viewing_path = os.path.join(self.img_for_viewing_folder,j.file_id+".png")
                 img_view = j.get_img_for_viewing(scale_bar=True,auto_max=False,colorize=True)
-                cv2.imwrite(img_for_viewing_path,img_view)
+                if not cv2.imwrite(img_for_viewing_path,img_view):
+                    raise ValueError("Could not save image to: "+img_for_viewing_path)
 
                 x = 0
                 data["type"] = "original"
@@ -1151,7 +1156,8 @@ class Image:
 
         empty_img = np.zeros(combined_mask.shape,dtype="uint8")
         empty_img_path = os.path.join(combined_mask_folder,z_stack_name+"_"+str(self.z_index)+"_"+id_channel+".png")
-        cv2.imwrite(empty_img_path,empty_img)
+        if not cv2.imwrite(empty_img_path,empty_img):
+            raise ValueError("Could not save path to: "+empty_img_path)
         
         categories = self.channels[0].categories
 
@@ -1184,7 +1190,8 @@ class Image:
                     combined_mask = cv2.bitwise_or(combined_mask,c.get_mask())
         
         combined_mask_path = os.path.join(combined_mask_folder,z_stack_name+"_z"+str(self.z_index)+".png")
-        cv2.imwrite(combined_mask_path,combined_mask)
+        if not cv2.imwrite(combined_mask_path,combined_mask):
+            raise ValueError("Could not save path to: "+combined_mask_path)
         
         self.set_combined_channel(z_stack_name,combined_mask_folder,combined_mask,combined_mask_path)
 
@@ -1625,7 +1632,8 @@ class Channel:
                 cv2.putText(img,all_ids,xy,cv2.FONT_HERSHEY_SIMPLEX,0.5,color,1,cv2.LINE_AA)
 
         img_w_contour_path = os.path.join(img_w_contour_folder,self.file_id+".png")
-        cv2.imwrite(img_w_contour_path,img)
+        if not cv2.imwrite(img_w_contour_path,img):
+            raise ValueError("Could not save image to: "+img_w_contour_path)
         
         self.img_w_contour_path = img_w_contour_path 
 
@@ -1689,7 +1697,9 @@ class Channel:
             return self.mask_path
         else: 
             self.mask_path = os.path.join(mask_save_folder,str(self.file_id)+".png")
-            cv2.imwrite(self.mask_path,self.mask)
+            saved_image = cv2.imwrite(self.mask_path,self.mask)
+            if saved_image is False: 
+                print("Could not save image to: "+self.mask_path)
             return self.mask_path
 
     def get_mask(self):
@@ -1783,8 +1793,7 @@ class Channel:
         
         self.mask = img
         if mask_save_folder is not None:
-            self.mask_path = os.path.join(mask_save_folder,str(self.file_id)+".png")
-            cv2.imwrite(self.mask_path,img)
+            self.get_mask_as_file(mask_save_folder)
     
     def find_contours(self,min_contour_area= 5): 
         '''
@@ -1870,8 +1879,9 @@ class Channel:
         if single_objects_folder is not None:
             for i in range(len(objects)):
                 fname = os.path.join(single_objects_folder,self.file_id+"_"+str(i)+".png")
-                cv2.imwrite(fname,objects[i])
-        
+                if not cv2.imwrite(fname,objects[i]):
+                    raise ValueError("Could not save image to: "+fname)
+            
         if len(objects)>0: 
             predictions = ai.get_predictions(objects)
         
@@ -3445,7 +3455,8 @@ class Image_in_pdf:
     def write_image(self): 
         #Write image to processed_path, change image path and delete from memory
         if self.changed_image: 
-            cv2.imwrite(self.processed_path,self.img)
+            if not cv2.imwrite(self.processed_path,self.img):
+                raise ValueError("Could not save image to: "+self.processed_path)
             self.img_path = self.processed_path
         self.img = None
     

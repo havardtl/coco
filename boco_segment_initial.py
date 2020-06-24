@@ -134,7 +134,7 @@ def main(index,image_numb,tot_images,stacks,categories):
     if args.verbose: print("\tMeasure channel",flush=True)
     channel.measure_channels([channel])
     if args.verbose: print("\tMaking image with contours",flush=True)
-    channel.make_img_with_contours(args.out_segmented_well,auto_max = True,scale_bar = False,colorize = False,add_distance_centers = False,add_contour_numbs = False)
+    channel.make_img_with_contours(args.out_segmented_well,auto_max = True,scale_bar = False,colorize = False,add_distance_centers = False,add_contour_numbs = True)
     if args.verbose: print("\tWriting annotation file\n",flush=True)
     channel.write_annotation_file(args.out_annotations,add_to_changelog = "Initial segmentation")
      

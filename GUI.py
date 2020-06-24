@@ -1,3 +1,12 @@
+#!/usr/bin/env python3
+
+#######################
+# Argument parsing
+#######################
+import argparse
+parser = argparse.ArgumentParser(description = 'Graphical user interface for launcing visual editor. Written so users not familiar with the command line can use the annotator.')
+args = parser.parse_args()
+
 import tkinter as tk
 import tkinter.filedialog as fdialog
 import tkinter.messagebox as mbox 
