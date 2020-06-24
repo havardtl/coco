@@ -12,7 +12,7 @@ Lindholm et al. (June 2020). "Developmental pathways regulate cytokine-driven ef
 
 Use at your own risk. This repository is not actively maintained, but you are welcome to open an issue and I might look at it.  
 
-## Dependencies
+## Installation
 It is recommended to install dependencies with conda. You can utilize the environment file environment.yml to get a copy of my environment. Alternatively, I had success with python 3.6 using the following commands: 
 
 `conda config --add channels conda-forge`
@@ -33,16 +33,6 @@ Add folder with coco scripts to PATH by adding this line to your .bashrc:
 
 Open the folder with images you want to analyze in bash and type the command you want to use. 
 
-## Todo: 
-- Write simple test
-- Remove code that tries to analyze stuff in 3D
-- Put as much as possible of the code into functions with comments. 
-- Simplify scripts into main commands "coco" and "boco" with sup-options
-- Write jupiter notebook with example of usage. 
-- Change default output to Add output with projection and each object number
-- Add possibility to add manual annotation of organoids and other annotations
-- Add log file for each run so that you know settings used to segment. (git log -1 --format="%H" gives commit hash)
-
 ## FAQ
 ### What alternatives are there to this program?
 ilastic can achieve a lot of the same image segmentation and classification as boco[1]. Macros in ImageJ can achieve most of the analysis except neural network based classification[2].
@@ -56,6 +46,14 @@ ilastic can achieve a lot of the same image segmentation and classification as b
 3. Select Formats
 4. Select your desired file format (e.g. “Zeiss CZI”) and select “Windowless”
 
+## Todo: 
+- Write simple test
+- Remove code that tries to analyze stuff in 3D
+- Put as much as possible of the code into functions with comments. 
+- Simplify scripts into main commands "coco" and "boco" with sup-options
+- Write jupiter notebook with example of usage. 
+- Add possibility to add manual annotation of organoids and other annotations
+- Add log file for each run so that you know settings used to segment. (git log -1 --format="%H" gives commit hash)
 
 
 
