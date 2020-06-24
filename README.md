@@ -47,7 +47,6 @@ ilastic can achieve a lot of the same image segmentation and classification as b
 4. Select your desired file format (e.g. “Zeiss CZI”) and select “Windowless”
 
 ## Todo: 
-- Write simple test
 - Remove code that tries to analyze stuff in 3D
 - Put as much as possible of the code into functions with comments. 
 - Simplify scripts into main commands "coco" and "boco" with sup-options
