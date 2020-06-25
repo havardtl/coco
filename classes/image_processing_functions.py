@@ -9,7 +9,7 @@ import pandas as pd
 import numpy as np
 import cv2
 
-import utilities.classes as classes 
+import classes.classes as classes 
 
 IMG_FILE_ENDING = ".ome.tiff"
 VERBOSE = False

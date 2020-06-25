@@ -13,8 +13,8 @@ parser.add_argument('--debug',action='store_true',default=False,help='debug mode
 parser.add_argument('--verbose',action='store_true',default=False,help="Print statements about program state as it runs")
 parser.add_argument('--cores',type=int,help='Number of cores to use. Default is number of cores in machine minus 1.')
 parser.add_argument('--n_process',type=int,help='Process the n first alphabetically sorted wells')
-parser.add_argument('--categories',type=str,help='File to load category information from. Default is to load it from default file in utilities/boco_categories.csv')
-parser.add_argument('--annotations',type=str,default='annotations',help="Folder with annotation of channel images")
+parser.add_argument('--categories',type=str,help='File to load category information from. Default is to load it from default file in config/boco_categories.csv')
+parser.add_argument('--annotations',type=str,default='annotations',help="Folder with annotation of channel images. NB! Annotations not manually reviewed are not added.")
 args = parser.parse_args()
 
 ########################
@@ -28,15 +28,15 @@ import numpy as np
 import pandas as pd
 import cv2
 
-import utilities.image_processing_functions as oi
-import utilities.classes as classes
+import classes.image_processing_functions as oi
+import classes.classes as classes
 
 ########################
 # setup 
 ########################
 this_script_folder = os.path.dirname(os.path.abspath(os.path.realpath(__file__)))
 if args.categories is None: 
-    args.categories = os.path.join(this_script_folder,"utilities","boco_categories.csv")
+    args.categories = os.path.join(this_script_folder,"config","boco_categories.csv")
 
 if args.debug: 
     args.verbose = True
@@ -92,7 +92,7 @@ def main(df,index,stacks,annotations,categories,annotations_folder):
     if args.verbose: print("\tFinding contours",flush=True)
     channel.find_contours()
     if args.verbose: print("\tAdding annotations")
-    channel.add_annotation(annotations,match_file_id=True,flush=True)
+    channel.add_annotation(annotations,match_file_id=True)
     if args.verbose: print("\tSplitting on annotations",flush=True)
     channel.split_on_annotations()
     if args.verbose: print("\tChecking annotations",flush=True)

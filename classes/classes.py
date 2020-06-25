@@ -1351,7 +1351,7 @@ class Channel:
         match_channels : bool               : If true, looking for identical file id instead of finding similar channel. 
         '''
         if match_file_id: 
-            for a in annotations: 
+            for a in annotations:
                 if a.file_id == self.file_id: 
                     if a.manually_reviewed: 
                         if not self.annotation_this_channel is None: 
@@ -1370,13 +1370,13 @@ class Channel:
                 else:
                     self.annotation_other_channel.append(a)
             
-            if VERBOSE: 
-                if self.annotation_this_channel is None: 
-                    print("Did not find manually reviewed annotation file.",end="\t")
-                else: 
-                    print("Found annotation file: "+self.annotation_this_channel.file_id+"\t n_annotations: "+str(len(self.annotation_this_channel.df.index)),end="\t")
-                print("And added "+str(len(self.annotation_other_channel))+" other channel annotations")
-            
+        if VERBOSE: 
+            if self.annotation_this_channel is None: 
+                print("Did not find manually reviewed annotation file.",end="\t")
+            else: 
+                print("Found annotation file: "+self.annotation_this_channel.file_id+"\t n_annotations: "+str(len(self.annotation_this_channel.df.index)),end="\t")
+            print("And added "+str(len(self.annotation_other_channel))+" other channel annotations")
+        
     def split_on_annotations(self): 
         '''
         Split up contours based on annotations
@@ -1869,7 +1869,7 @@ class Channel:
         Params
         single_objects_folder : str : if supplied, images used for neural network are saved here
         '''
-        import utilities.neural_network.type_predict as ai 
+        import classes.AI_functions as ai 
         
         objects = []
         for c in self.contours: 
@@ -1924,15 +1924,17 @@ class Channel:
         df = self.get_contour_stats()
         if self.annotation_this_channel is not None: 
             reviewed_by_human = self.annotation_this_channel.manually_reviewed
-            changelog = self.annotation_this_channel.changelog 
+            changelog = self.annotation_this_channel.changelog
+            next_object_id = self.annotation_this_channel.next_object_id
         else: 
             reviewed_by_human = False 
             changelog = ""
+            next_object_id = None
         
         if add_to_changelog is not None: 
             changelog = changelog + today +"\t"+add_to_changelog + "\n"
         
-        Annotation.write_annotation_file(out_path,reviewed_by_human,changelog,df)
+        Annotation.write_annotation_file(out_path,reviewed_by_human,changelog,df,next_object_id)
 
     def print_all(self):
         print("\t\t",end="")
@@ -2926,7 +2928,7 @@ class Categories():
         return bgr 
 
 class Annotation: 
-    def __init__(self,file_id,df,manually_reviewed,categories,changelog = ""): 
+    def __init__(self,file_id,df,manually_reviewed,categories,changelog = "",next_object_id = None): 
         '''
         Class containing annotation data for image
 
@@ -2948,6 +2950,7 @@ class Annotation:
             self.manually_reviewed = False
 
         self.changelog = changelog
+        self.next_object_id = next_object_id
        
         #self.df["contour_id"] = self.id_channel + "_" + df["contour_id"].astype('str') 
         self.df["contour_groups"] = ""
@@ -2980,7 +2983,7 @@ class Annotation:
         
         file_id = os.path.splitext(os.path.split(path)[1])[0]
         
-        annotation = Annotation(file_id,df,reviewed_by_human,categories,changelog)
+        annotation = Annotation(file_id,df,reviewed_by_human,categories,changelog,next_object_id)
         
         return annotation
     
@@ -3043,7 +3046,7 @@ class Annotation:
         return reviewed_by_human,changelog,df,next_object_id 
 
     @classmethod
-    def write_annotation_file(self,path,reviewed_by_human,changelog,df,next_object_id = None):
+    def write_annotation_file(self,path,reviewed_by_human,changelog,df,next_object_id):
         '''
         Save annotation file in specific format for this program
         
@@ -3055,18 +3058,23 @@ class Annotation:
         next_object_id    : int          : the id of the next organoid to be added. To make sure that no organoid in this annotation ever gets the same id-number
         '''
         if next_object_id is None: 
-            next_object_id = 0
             if df is not None: 
                 if len(df.index) > 0: 
                     next_object_id = pd.to_numeric(df['object_id']).max() + 1
-                
+            else: 
+                next_object_id = 0
+        
+        try: 
+            next_object_id = int(next_object_id)
+        except ValueError: 
+            pass
 
         with open(path,'w') as f:
             if reviewed_by_human: 
                 f.write("reviewed_by_human = True\n")
             else:
                 f.write("reviewed_by_human = False\n")
-            f.write("next_object_id = "+str(int(next_object_id))+"\n")
+            f.write("next_object_id = "+str(next_object_id)+"\n")
             f.write("--changelog--\n")
             f.write(changelog)
             f.write("--organoids--\n")

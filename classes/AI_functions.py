@@ -22,11 +22,13 @@ def get_classes(path = None):
     '''
     
     if path is None: 
-        train_data_folder = os.path.join(os.path.dirname(os.path.realpath(__file__)),"AI_train_results")
+        this_script_path = os.path.dirname(os.path.realpath(__file__))
+        repository_path  = this_script_path.rsplit("/",1)[0]
+
+        classes_path = os.path.join(repository_path,"config","AI_train_results","classes.txt")
     else: 
-        train_data_folder = path 
+        classes_path = path 
     
-    classes_path = os.path.join(train_data_folder,"classes.txt")
     with open(classes_path,'r') as f: 
         classes = f.readlines()
 
@@ -46,14 +48,15 @@ def get_model(path = None):
     model : Keras model : The neural network model
     '''
 
-    if path is None:  
-        train_data_folder = os.path.join(os.path.dirname(os.path.realpath(__file__)),"AI_train_results")
-    else: 
-        train_data_folder = path 
+    if path is None:
+        this_script_path = os.path.dirname(os.path.realpath(__file__))
+        repository_path  = this_script_path.rsplit("/",1)[0]
 
-    model_path = os.path.join(train_data_folder,"last_model.h5")
+        model_path = os.path.join(repository_path,"config","AI_train_results","last_model.h5")
+    else: 
+        model_path = path 
+
     model = load_model(model_path)
-    
     return model
 
 def get_keras_data_format(): 

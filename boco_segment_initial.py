@@ -11,8 +11,8 @@ parser.add_argument('--out_projections',type=str,default = 'min_projections', he
 parser.add_argument('--out_annotations',type=str,default = 'annotations', help='Output folder for annotations')
 parser.add_argument('--out_segmented_well',type=str,default = 'graphic_out_segment_raw', help='Output folder for graphical segmentation')
 parser.add_argument('--minimum_size',type = int,default=300,help='The minimum size of organoids. Default: 300.')
-parser.add_argument('--categories',type=str,help='File to load category information from. Default is to load it from default file in utilities/boco_categories.csv')
-parser.add_argument('--AI_weights_data',type=str,default='find_in_ORGAI_folder',help='Path to folder with AI weights used to predict images')
+parser.add_argument('--categories',type=str,help='File to load category information from. Default is to load it from default file in repository: config/boco_categories.csv')
+#parser.add_argument('--AI_weights_data',type=str,default=None,help='Path to folder with AI weights used to predict images. Default is to find in repository: config/AI_train_results/last_model.h5')
 parser.add_argument('--out_single_organoids',type=str,help='Folder with single organoids output from this program. Only made if supplied.')
 parser.add_argument('--out_treatment_xlsx',type=str,default='treatment_info.xlsx',help='Excel file where the user can submit treatment information. Only made if does not exist.')
 parser.add_argument('--out_process_annotations_rscript',type=str,default='process_annotations.R',help='Copy R script for processing annotations into this location.')
@@ -38,8 +38,8 @@ import cv2
 import numpy as np 
 import pandas as pd
 
-import utilities.image_processing_functions as oi
-import utilities.classes as classes
+import classes.image_processing_functions as oi
+import classes.classes as classes
 
 #classes.load_neural_network()
 ########################
@@ -60,7 +60,7 @@ if args.verbose:
 ##############################
 this_script_folder = os.path.dirname(os.path.abspath(os.path.realpath(__file__)))
 if args.categories is None: 
-    args.categories = os.path.join(this_script_folder,"utilities","boco_categories.csv")
+    args.categories = os.path.join(this_script_folder,"config","boco_categories.csv")
 
 os.makedirs(args.out_projections,exist_ok=True)
 os.makedirs(args.out_segmented_well,exist_ok=True)
@@ -180,7 +180,7 @@ if not os.path.exists(args.out_treatment_xlsx):
 
 if not os.path.exists(args.out_process_annotations_rscript):
     orgai_folder, this_script_name = os.path.split(os.path.realpath(__file__))
-    rscript_current_path = os.path.join(orgai_folder,"utilities",'process_annotations.R')
+    rscript_current_path = os.path.join(orgai_folder,"config",'process_annotations.R')
     shutil.copyfile(rscript_current_path,args.out_process_annotations_rscript)
 
 
