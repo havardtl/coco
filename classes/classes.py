@@ -11,6 +11,8 @@ import aicspylibczi
 import pathlib
 import xml.etree.ElementTree as ET
 
+import classes.AI_functions as ai 
+
 #TODO: Manual corrections should point to a new annotation file, not edit the old one. 
 
 #TODO: all functionality should happen in channel class. Z-stack and Image should be wrappers to add additonal functionality on top of that. 
@@ -1419,7 +1421,6 @@ class Channel:
         halo     : int  : How many pixels from the edge to remove to find definite centers
         min_size : int  : Objects smaller than this will be removed 
         '''
-        
         if erode == True: 
             kernel = np.ones((3,3),np.uint8)
         else: 
@@ -1861,29 +1862,122 @@ class Channel:
         
         for i in self.contours: 
             i.measure_channel(channels)
-
-    def classify_objects(self,single_objects_folder = None): 
+    
+    def write_single_objects(self,single_objects_folder,box_size = 120,merge_categories=None,keep_ambigous=False,dry_run = False):
+        '''
+        Write images of only objects on a white background with a folder for each category
+        
+        Params
+        single_objects_folder : str  : path to folder to write objects in
+        box_size              : int  : Size of box around object
+        merge_categories      : dict : If not None, merge category from key into value in dictionary
+        keep_ambigous         : bool : If object has more than one category it is ambigous, default is to throw them out. 
+        dry_run               : bool : Do everything except saving images. 
+        '''
+        # Get objects, their names and their categories
+        objects = []
+        objects_categories = []
+        n_unassigned = 0
+        n_ambigous = 0
+        n_assigned = 0
+        for c in self.contours:
+            only_object = c.get_only_object(self,box_size = 120)
+            objects.append(only_object)
+            category = c.annotation_this_channel_type
+            if len(category) == 0:
+                category = "None"
+                n_unassigned += 1
+            elif len(category) == 1:
+                category = category[0]
+                n_assigned += 1
+            elif len(category)>=2:
+                category = "Ambigous"
+                n_ambigous += 1
+            objects_categories.append(category)
+        
+        if VERBOSE: print("Total objects: \t"+str(len(objects)))
+        if VERBOSE: print("n_unassigned: \t"+str(n_unassigned)+"\nn_assigned: \t"+str(n_assigned)+"\nn_ambigous: \t"+str(n_ambigous))
+        
+        objects_fnames = []
+        for i in range(len(objects)):
+            objects_fnames.append(self.file_id+"_"+str(i)+".png")
+        
+        # Make df representing objects and where they should be put
+        df = pd.DataFrame(data={'category':objects_categories,'fname':objects_fnames,'object':objects})
+        if not keep_ambigous:
+            old_length = len(df.index)
+            df = df.loc[df["category"] != "Ambigous",]
+            if VERBOSE: print("Threw out objects labelled as 'Ambigous'.\tOld length: "+str(old_length)+"\tnew length: "+str(len(df.index)))
+        
+        if merge_categories is not None: 
+            for key in merge_categories.keys():
+                if VERBOSE: old_length = sum(df["category"]==key)
+                df.loc[df["category"]==merge_categories[key],"category"] = key
+                if VERBOSE: 
+                    new_length = sum(df["category"]==key)
+                    print("Merged '"+merge_categories[key]+"' into '"+key+"'.\tOld number of objects in category "+key+": "+str(old_length)+"\tnew number: "+str(new_length))
+        
+        categories = df['category'].unique()
+        if VERBOSE: print("Categories: "+str(categories))
+        
+        '''
+        #TODO: Move this code to begining of AI function
+        if validation_n is not None: 
+            if VERBOSE: print("Splitting into test and validation. validation_n: "+str(validation_n))
+            df["test_val"] = "test"
+            for c in categories: 
+                this_category = df.loc["category"==c,]
+                if(len(this_category.index)<validation_n):
+                    raise ValueError("No values left in test set after extraction validation set! \tcategory: "+str(c)+"\tn_category"+str(len(this_category.index)))
+                validation_set = this_category.sample(n=validation_n).index
+                df.loc[validation_set,"test_val"] = "validation"
+            
+            if VERBOSE: 
+                df['test_val_category'] = df["test_val"]+"/"+df["category"]
+                print(df['test_val_category'].value_counts())
+                
+            for i in df.index: 
+                df.loc[i,"out_path"] = os.path.join(single_objects_folder,df.loc[i,"test_val"],df.loc[i,"category"],df.loc[i,"fname"])
+        '''
+        
+        if VERBOSE: print(df['category'].value_counts())
+        for i in df.index: 
+            df.loc[i,"out_path"] = os.path.join(single_objects_folder,"train",df.loc[i,"category"],df.loc[i,"fname"])
+    
+        # Write out folders and files
+        for c in categories:
+            os.makedirs(os.path.join(single_objects_folder,"train",c),exist_ok=True)
+        
+        #if VERBOSE: print(df)
+        
+        if dry_run:
+            if VERBOSE: print("Dry run. Not writing images.")
+        else: 
+            counter = 0
+            tot_length = len(df.index)
+            for i in df.index: 
+                if VERBOSE: 
+                    counter += 1
+                    if counter % 500 == 0: 
+                        print(str(counter)+"/"+str(tot_length)+"\t Writing image: "+df.loc[i,"out_path"])
+                if not cv2.imwrite(df.loc[i,"out_path"],df.loc[i,"object"]):
+                    raise ValueError("Could not write image to "+df.loc[i,"out_path"])
+        
+    def classify_objects(self,ai_predict): 
         '''
         Classify contour objects
 
         Params
-        single_objects_folder : str : if supplied, images used for neural network are saved here
+        ai_predict : AI_predict : instance of object with functions to predict object class
         '''
-        import classes.AI_functions as ai 
         
         objects = []
         for c in self.contours: 
             only_object = c.get_only_object(self,box_size = 120)
             objects.append(only_object)
 
-        if single_objects_folder is not None:
-            for i in range(len(objects)):
-                fname = os.path.join(single_objects_folder,self.file_id+"_"+str(i)+".png")
-                if not cv2.imwrite(fname,objects[i]):
-                    raise ValueError("Could not save image to: "+fname)
-            
         if len(objects)>0: 
-            predictions = ai.get_predictions(objects)
+            predictions = ai_predict.get_predictions(objects)
         
             for i in range(len(predictions)):
                 self.contours[i].annotation_this_channel_type = [predictions[i]]
@@ -2328,10 +2422,13 @@ class Contour:
             object_type = None 
             object_id = None 
         
+        if self.distance_centers is None: 
+            self.find_distance_centers(None,None,None)
+        
         distance_center = [None,None] 
         if self.distance_centers is not None: 
             if len(self.distance_centers) == 1: 
-                distance_center = self.distance_centers[0]
+                distance_centers = self.distance_centers[0]
 
         data = {
             "img_dim_yx":str(self.img_dim),
@@ -2842,6 +2939,19 @@ class Categories():
             if c.button == button: 
                 return c.name
         return "None"
+        
+    def get_categories_names(self):
+        '''
+        Get a list of all unique categories
+        
+        Returns
+        categories : set of str : All categories
+        '''
+        categories = []
+        for c in self.categories:
+            categories.append(c)
+        categories = set(categories)
+        return categories
     
     def get_show_size(self,category):
         '''

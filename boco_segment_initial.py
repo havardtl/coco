@@ -12,8 +12,7 @@ parser.add_argument('--out_annotations',type=str,default = 'annotations', help='
 parser.add_argument('--out_segmented_well',type=str,default = 'graphic_out_segment_raw', help='Output folder for graphical segmentation')
 parser.add_argument('--minimum_size',type = int,default=300,help='The minimum size of organoids. Default: 300.')
 parser.add_argument('--categories',type=str,help='File to load category information from. Default is to load it from default file in repository: config/boco_categories.csv')
-#parser.add_argument('--AI_weights_data',type=str,default=None,help='Path to folder with AI weights used to predict images. Default is to find in repository: config/AI_train_results/last_model.h5')
-parser.add_argument('--out_single_organoids',type=str,help='Folder with single organoids output from this program. Only made if supplied.')
+parser.add_argument('--AI_folder',type=str,default=None,help='Path to folder with AI weights used to predict images. Default is to find in repository: config/AI_train_results')
 parser.add_argument('--out_treatment_xlsx',type=str,default='treatment_info.xlsx',help='Excel file where the user can submit treatment information. Only made if does not exist.')
 parser.add_argument('--out_process_annotations_rscript',type=str,default='process_annotations.R',help='Copy R script for processing annotations into this location.')
 parser.add_argument('--dryrun',action='store_true',default=False,help='Do everything except processing images.')
@@ -40,6 +39,7 @@ import pandas as pd
 
 import classes.image_processing_functions as oi
 import classes.classes as classes
+import classes.AI_functions as ai
 
 #classes.load_neural_network()
 ########################
@@ -64,8 +64,6 @@ if args.categories is None:
 
 os.makedirs(args.out_projections,exist_ok=True)
 os.makedirs(args.out_segmented_well,exist_ok=True)
-if args.out_single_organoids is not None: 
-    os.makedirs(args.out_single_organoids,exist_ok=True)
 os.makedirs(args.out_annotations,exist_ok=True)
 
 categories = classes.Categories.load_from_file(args.categories)
@@ -84,7 +82,9 @@ if not args.n_process is None:
 
 print("found {n_stacks} stacks belonging to {n_wells} wells, {avg_stacks} stacks per well\n".format(n_stacks = len(stacks.index),n_wells = n_wells,avg_stacks = stacks_per_image))
 
-def main(index,image_numb,tot_images,stacks,categories):
+ai_predict = ai.AI_predict(ai.AI(args.AI_folder))
+
+def main(index,image_numb,tot_images,stacks,categories,ai_predict):
     '''
     Process one image of the program 
 
@@ -94,6 +94,7 @@ def main(index,image_numb,tot_images,stacks,categories):
     tot_images : int              : total images that are processed
     stacks     : pandas.DataFrame : Data frame containing the path to stacks 
     categories : Categories       : Categories relevant for this set of images
+    ai_predict : AI_predict       : Instance of object to predict object class with AI
     '''
 
     min_projection_name = index+".png"
@@ -128,7 +129,7 @@ def main(index,image_numb,tot_images,stacks,categories):
     if args.verbose: print("\tFinding distance centers",flush=True)
     channel.find_distance_centers(erode = None,halo = None,min_size = None)
     if args.verbose: print("\tClassifying objects",flush=True)
-    channel.classify_objects(single_objects_folder = args.out_single_organoids) 
+    channel.classify_objects(ai_predict) 
     if args.verbose: print("\tUpdating contour stats",flush=True)
     channel.update_contour_stats()
     if args.verbose: print("\tMeasure channel",flush=True)
@@ -148,14 +149,14 @@ else:
 if not args.dryrun: 
     if cores==1: 
         for i in range(0,len(image_ids)):
-            image_info = main(image_ids[i],i+1,len(image_ids),stacks,categories)
+            image_info = main(image_ids[i],i+1,len(image_ids),stacks,categories,ai_predict)
             df = df.append(image_info,ignore_index=True)
     else: 
         pool = mp.Pool(cores)
 
         image_info = []
         for i in range(0,len(image_ids)):
-            image_info.append(pool.apply_async(main,args=(image_ids[i],i+1,len(image_ids),stacks,categories)))
+            image_info.append(pool.apply_async(main,args=(image_ids[i],i+1,len(image_ids),stacks,categories,ai_predict)))
 
         pool.close()
         pool.join()

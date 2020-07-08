@@ -520,6 +520,9 @@ def find_edges(z_planes):
             edges = edge
         else:
             edges = edges + edge
+            
+    if edges is None: 
+        raise ValueError("Could not properly read images. edges = "+str(edges)+", z_planes: "+str(z_planes))
     
     kernel_3 = np.ones((3,3),np.uint8)   
     edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel_3)
@@ -624,7 +627,7 @@ def find_stacks(folder):
     
     '''
     stacks = walk_to_df(folder,id_split=None,filter_str="TIF")
-    if len(stacks) ==0:
+    if len(stacks) == 0:
         raise ValueError("Did not find any stacks")
 
     stacks_id = []
