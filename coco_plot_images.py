@@ -30,8 +30,8 @@ import multiprocessing as mp
 import pandas as pd
 import cv2
 import pickle
+import shutil
 
-import utilities.image_processing_functions as oi
 import utilities.classes as classes
 
 ##############################
@@ -49,7 +49,7 @@ if not os.path.exists(args.annotation_file):
 
 if args.overwrite: 
     for folder in [args.temp_folder,args.projections_raw_folder,args.projections_pdf_folder]:
-        oi.delete_folder_with_content(folder)
+        shutil.rmtree(folder)
 
 if args.debug: 
     args.cores = 1
@@ -82,7 +82,7 @@ categories = classes.Categories.load_from_file(args.categories)
 if not args.n_process is None:
     raw_imgs = raw_imgs[0:args.n_process]
 
-segment_settings = oi.excel_to_segment_settings(args.annotation_file)
+segment_settings = classes.Segment_settings.excel_to_segment_settings(args.annotation_file)
 
 def main(image_info,info,segment_settings,categories):
     '''
@@ -154,7 +154,7 @@ print(type(df),flush=True)
 print(df["img_dim"].mode(),flush=True)
 
 most_common_img_dim = str(df["img_dim"].mode()[0])
-image_dim_goal = oi.img_dim_str_to_tuple(most_common_img_dim)
+image_dim_goal = classes.Pdf.img_dim_str_to_tuple(most_common_img_dim)
 image_dim_goal = (int(image_dim_goal[0]),int(image_dim_goal[1]))
 
 print("Adding annotation info from: "+args.annotation_file,flush=True)
@@ -181,5 +181,5 @@ y_vars_sortdirs = list(plot_vars.loc[plot_vars["plot_axis"]=="y","sort_ascending
 
 sort_directions = file_vars_sortdirs+y_vars_sortdirs+x_vars_sortdirs
 
-oi.plot_images_pdf(args.projections_pdf_folder,df,file_vars,x_vars,y_vars,image_vars,image_dim_goal,pdf_processed_images_folder,sort_directions)
+classe.Pdf.plot_images_pdf(args.projections_pdf_folder,df,file_vars,x_vars,y_vars,image_vars,image_dim_goal,pdf_processed_images_folder,sort_directions)
 

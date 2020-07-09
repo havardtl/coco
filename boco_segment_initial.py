@@ -37,7 +37,6 @@ import cv2
 import numpy as np 
 import pandas as pd
 
-import classes.image_processing_functions as oi
 import classes.classes as classes
 import classes.AI_functions as ai
 
@@ -51,7 +50,7 @@ if args.debug:
     args.cores = 1
 
 if args.verbose: 
-    oi.VERBOSE = True
+    classes.VERBOSE = True
     print("Running boco_segment_initial.py in verbose mode")
     print("opencv version: "+str(cv2.__version__))
 
@@ -68,7 +67,7 @@ os.makedirs(args.out_annotations,exist_ok=True)
 
 categories = classes.Categories.load_from_file(args.categories)
 
-stacks = oi.find_stacks(args.z_planes)
+stacks = classes.Image_evos.find_stacks(args.z_planes)
 
 df = pd.DataFrame(columns = ["id","root_image","file_image","root_annotation","file_annotation","manually_reviewed"])
 image_ids = list(set(stacks["id"]))
@@ -116,12 +115,8 @@ def main(index,image_numb,tot_images,stacks,categories,ai_predict):
     changelog = today+" segmented_images\n"
     
     z_planes = list(stacks["full_path"][stacks['id']==index])
-    min_projection = oi.min_projection(z_planes)
-    cv2.imwrite(min_projection_path,min_projection)
-    edges = oi.find_edges(z_planes)
+    channel = classes.Image_evos(z_planes).get_channel(min_projection_path,categories)
     
-    channel = classes.Channel(min_projection_path,channel_index = 0,z_index = 0,color = (255,255,255),categories = categories)
-    channel.mask = edges
     if args.verbose: print("\tFinding contours",flush=True)
     channel.find_contours(min_contour_area = args.minimum_size)
     if args.verbose: print("\tSplitting contours",flush=True)

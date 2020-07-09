@@ -33,10 +33,10 @@ import cv2
 import numpy as np 
 import pandas as pd
 
-import utilities.image_processing_functions as oi
 import utilities.classes as classes
 
 import pickle
+import shutil
 
 ##############################
 # Run program
@@ -53,8 +53,8 @@ if not os.path.exists(args.settings_file):
 
 if args.overwrite:
     for folder in [args.temp_folder,args.out_graphical,args.out_contours]:
-        oi.delete_folder_with_content(folder)
-
+        shutil.rmtree(folder)
+        
 os.makedirs(args.out_graphical,exist_ok=True)
 os.makedirs(args.out_contours,exist_ok=True)
 os.makedirs(args.temp_folder,exist_ok = True)
@@ -67,11 +67,11 @@ if args.raw_file is None:
     raw_imgs = []
     for i in os.listdir(args.raw_folder): 
         raw_path = os.path.join(args.raw_folder,i)
-        img_i = classes.Image_czi(raw_path,args.temp_folder,args.extracted_images_folder,pickle_folder)
+        img_i = classes.Image_czi(raw_path,args.extracted_images_folder)
         raw_imgs.append(img_i)
     raw_imgs.sort()
 else: 
-    raw_imgs = [classes.Image_czi(args.raw_file,args.temp_folder,args.extracted_images_folder,pickle_folder)]
+    raw_imgs = [classes.Image_czi(args.raw_file,args.extracted_images_folder)]
     args.cores = 1
 
 if not args.n_process is None:
@@ -87,7 +87,7 @@ classes.TEMP_FOLDER = args.temp_folder
 classes.GRAPHICAL_SEGMENTATION_FOLDER = args.out_graphical
 
 print("Found {n_files} to process".format(n_files = len(raw_imgs)),flush=True)
-segment_settings = oi.excel_to_segment_settings(args.settings_file)
+segment_settings = classes.Segment_settings.excel_to_segment_settings(args.settings_file)
 
 categories = classes.Categories.load_from_file(args.categories)
 

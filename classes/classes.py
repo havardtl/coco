@@ -61,24 +61,201 @@ def set_zipped_list(a,b):
 # Classes
 ###############################################
 
-#TODO: implement this class with the goal of a function that gives a processed z_stack 
 class Image_evos: 
-    def __init__(self): 
-        pass 
+    def __init__(self,z_planes): 
+        '''
+        Class to process evos files
+        
+        Params
+        z_planes : list of str : paths to EVOS z_planes 
+        '''
+
+        self.z_planes = z_planes
+        self.projection = None
+        
+        if VERBOSE: print("\tInitializing Image_evos. "+str(self))
+        
+    def make_min_projection(self):
+        '''
+        Convert z-stack of images to min-projection so we can export a Channel object instead of z_stack
+        '''
+        
+        if VERBOSE: print("\tImage_evos: Making minimal projection")
+        
+        min_projection = None
+        for path in self.z_planes: 
+            plane = cv2.imread(path,cv2.IMREAD_ANYDEPTH)
+            if min_projection is None:
+                min_projection = plane
+            else: 
+               min_projection = np.minimum(min_projection,plane)
+               
+        max_pixel = min_projection.max()
+        min_projection = (min_projection/(max_pixel/255)).astype('uint8')
+        
+        self.projection = min_projection
+        
+    def write_projection(self,path):
+        '''
+        Write projection to file
+        
+        Params
+        path : str : path to write projection to 
+        '''
+        if not cv2.imwrite(path,self.projection):
+            raise ValueError("Could not write projection to: "+path)
+            
+    def find_edges(self):
+        """
+        Find edges of obects in a stack of z_planes and save the projection of those edges
+        """
+        if VERBOSE: print("\tImage_evos: Finding edges")
+        
+        edges = None
+        for plane_path in self.z_planes:
+            edge = cv2.imread(plane_path,cv2.IMREAD_ANYDEPTH)
+            max_pixel = np.amax(edge)
+            edge = (edge/(max_pixel/255)).astype('uint8')
+            edge = cv2.Canny(edge,100,200)
+            edge = Channel.remove_small_objects(edge,60)
+            if edges is None: 
+                edges = edge
+            else:
+                edges = edges + edge
+                
+        if edges is None: 
+            raise ValueError("Could not properly read images. edges = "+str(edges)+", z_planes: "+str(self.z_planes))
+        
+        kernel_3 = np.ones((3,3),np.uint8)   
+        edges = cv2.morphologyEx(edges, cv2.MORPH_CLOSE, kernel_3)
+        self.edges = edges     
+
+    def get_channel(self,projection_path,categories):
+        '''
+        Return a Channel object 
+        
+        Params
+        projection_path : str        : Path to write minimal projection to
+        categories      : Categories : object describing categories
+
+        Returns
+        channel : Channel : object describing one channel to process
+        '''
+        self.make_min_projection()
+        self.write_projection(projection_path)
+        channel = Channel(projection_path,channel_index = 0,z_index = 0,color = (255,255,255),categories = categories)
+        self.find_edges()
+        channel.mask = self.edges
+        return channel
+    
+    @classmethod
+    def walk_to_df(self,folder,id_split='-',filter_str=""):
+        '''
+        Find all files in folder recursively and report back as data frame with columns 
+        
+        Params
+        folder      : str   : path to folder to look for files
+        id_split    : str   : "id" is determined as everything before the first occurence of "id_split" in the file name. 
+        filter_str  :       : do not include file names that have this string in their name
+        
+        Returns
+        df          : pandas.DataFrame : data frame with information of all files in folder. "id" = file id, "root" = path to root folder, "file" = file name. 
+        '''
+        df = pd.DataFrame(columns = ["root","file"])
+        f_id = []
+        for root, dirs, fnames in os.walk(folder):
+            if root is not list: 
+                r = root
+                root = [r]
+            if len(fnames) > 0:
+                for r in root: 
+                    temp = pd.DataFrame(columns = ["root","file"])
+                    temp["file"] = fnames
+                    temp["root"] = r
+                    temp = temp[temp["file"].str.contains(filter_str)]
+                    df = df.append(temp,ignore_index=True)
+        
+        if id_split is not None:
+            for f in df["file"]:
+                name = f.split(id_split,1)[0]
+                f_id.append(name)
+        else:
+            f_id = range(0,len(df["file"]))
+        
+        if not len(set(f_id)) == len(f_id):
+            raise ValueError("Ids can't be equal")
+
+        df["id"] = f_id
+        df.set_index('id',inplace=True)
+        
+        if VERBOSE: print("Found "+str(len(df.index))+" files in folder: "+folder)
+        
+        return(df)
+    
+    @classmethod
+    def evos_to_imageid(self,name):
+        """ 
+        Takes in EVOS image name and returns imageid 
+
+        Params 
+        name    : str : <exp>_<plate>_<day>_*_0_<well>f00d*.TIF
+
+        Returns 
+        imageid : str : <exp>_<plate>_<well>_<day>
+        """
+        if ".TIF" in name or ".tif" in name: 
+            exp = name.split("_",3)[:3]
+            well = name.split("_0_",1)[1].split("f00d",1)[0]
+            return (exp[0]+"_"+exp[1]+"_"+well+"_"+exp[2])
+        else: 
+            return (None)
+            
+    @classmethod
+    def find_stacks(self,folder):
+        '''
+        Find all stacks in folder and report them back as data frame with id column
+        
+        Params 
+        folder : str : path to folder with all stacks
+        
+        Returns
+        stacks : pandas.DataFrame : Data frame with path to stack and individual id of stack
+        
+        '''
+        stacks = Image_evos.walk_to_df(folder,id_split=None,filter_str="TIF")
+        if len(stacks) == 0:
+            raise ValueError("Did not find any stacks")
+
+        stacks_id = []
+        stacks_path = []
+        for i in stacks.index:
+            stacks_id.append(Image_evos.evos_to_imageid(stacks.loc[i,"file"]))
+            stacks_path.append(os.path.join(stacks.loc[i,"root"],stacks.loc[i,"file"]))
+        stacks["id"] = stacks_id
+        stacks["full_path"] = stacks_path
+        
+        return stacks
+
+    def __repr__(self):
+        string = "Image_evos: n_z_planes = {nz}".format(nz = len(self.z_planes))
+        return string
 
 class Image_czi:
 
-    def __init__(self,raw_path,temp_folder,extracted_folder,pickle_folder=None):
+    def __init__(self,raw_path,extracted_folder):
+        '''
+        Class to process czi files
+        
+        Params
+        raw_path         : str : path to raw czi file to process
+        extracted_folder : str : path to put extracted files
+        '''
+        
         self.raw_path = raw_path 
         self.file_id = os.path.splitext(os.path.split(self.raw_path)[1])[0]
         
         self.extracted_folder = os.path.join(extracted_folder,self.file_id)
         os.makedirs(self.extracted_folder,exist_ok=True)
-        
-        if pickle_folder is not None: 
-            self.pickle_path = os.path.join(pickle_folder,self.file_id+".pickle")
-        else: 
-            self.pickle_path = None
         
         self.extracted_images_info_file = os.path.join(self.extracted_folder,"files_info.txt")
         
@@ -120,10 +297,10 @@ class Image_czi:
     
     def get_z_stack(self,segment_settings,categories,extract_method,max_projection = True,): 
         '''
-        Convert a list of extracted images to Zstack classes. 
+        Convert a list of extracted images to Zstack classes
         
         Params
-        segment_settings : list of Segment_settings : List of segment settings classes. One for each channel index
+        segment_settings : list of Segment_settings : List of segment settings classes, one for each channel index
         categories       : Categories               : Categories relevant for this set of images
         
         Returns
@@ -239,8 +416,6 @@ class Image_czi:
                 f.write(str(d.tag)+"\t"+str(d.text)+"\n")
     
     def extract_aicspylibczi(self,max_projection=True): 
-        # TODO: implement each of these extraction methods as their own class
-        # also move finding of physical resolution to each of these classes instead of having it in z_stack
         '''
         Use aicspylibczi to extract images from czi file. Assumes time and series dimensions = 1. 
 
@@ -255,7 +430,6 @@ class Image_czi:
         channels = list(range(dims['C'][1]))
         z_indexes = list(range(dims['Z'][1]))
         
-        #if czi.is_mosaic(): 
         for c in channels: 
             img_projection = None 
             for z in z_indexes: 
@@ -277,10 +451,6 @@ class Image_czi:
                 if not cv2.imwrite(out_path,img_projection):
                     raise ValueError("Could not save image to: "+out_path)
                 
-        #else: 
-        #    raise ValueError("Have not yet implemented not mosaic file")
-            #TODO
-        
         self.meta_xml_to_file(czi,os.path.join(self.extracted_folder,"meta_data.txt"))
         
         img_paths = []
@@ -295,6 +465,8 @@ class Image_czi:
     def extract_bfconvert(self):
         '''
         Use bfconvert tool to get individual stack images from microscopy format file
+        
+        Legacy function. Only aicspylibczi is currently supported
         '''
         
         bfconvert_info_str = "_INFO_%s_%t_%z_%c"
@@ -327,6 +499,13 @@ class Image_czi:
         Use imagej to get individual stack images from microscopy format file. This script also stitch together images in x-y plane.
         
         Sometimes you get problems when ImageJ tries to reuse the same session. I think this might be solved by unchecking the box "Run single instance listener" under Edit --> Options --> Misc...  
+        
+        How to enable auto-stitch of czi files in ImageJ:
+        1. Open FIJI2. Navigate to Plugins > Bio-Formats > Bio-Formats Plugins Configuration
+        2. Select Formats
+        3. Select your desired file format (e.g. “Zeiss CZI”) and select “Windowless”
+
+        Legacy function. Only aicspylibczi is currently supported
         
         Params 
         use_xvfb : bool : Run imagej with xvfb-run command to avoid need for showing imagej bar etc.
@@ -386,7 +565,7 @@ class Image_czi:
         
     
     def __repr__(self):
-        string = "Img_file: raw_path = {r},extracted_folder = {e}, pickle_path = {p}".format(r = self.raw_path,e=self.extracted_folder,p=self.pickle_path)
+        string = "Img_file: raw_path = {r},extracted_folder = {e}".format(r = self.raw_path,e=self.extracted_folder)
     
     def __lt__(self,other):
         return self.file_id < other.file_id
@@ -524,6 +703,33 @@ class Segment_settings:
             "open_kernel":self.open_kernel_int
         }
         return data
+    
+    @classmethod
+    def excel_to_segment_settings(self,excel_path): 
+        '''
+        Convert Excel file to list of Segment_settings objects
+        
+        Params 
+        excel_path : str : Path to excel file to read
+        
+        Returns
+        segment_settings : list of Segment_settings : List of Segment_settings
+        '''
+        
+        df_segment_settings = pd.read_excel(excel_path,sheet_name = SEGMENT_SETTINGS_SHEET)
+        
+        df_segment_settings = df_segment_settings.where((pd.notnull(df_segment_settings)), None) #Convert invalid cells to None instead of NaN
+
+        segment_settings = []
+        for channel in df_segment_settings["channel_index"]: 
+            s = df_segment_settings.loc[df_segment_settings["channel_index"]==channel,]
+            if len(s["channel_index"])!=1:
+                raise ValueError("Need at least one unique channel index in segment settings.")
+            s = s.iloc[0,]
+            segment_settings_c = Segment_settings(channel,s["global_max"],s["color"],s["contrast"],s["auto_max"],s["thresh_type"],s["thresh_upper"],s["thresh_lower"],s["open_kernel"],s["close_kernel"],s["min_size"],s["combine"])
+            segment_settings.append(segment_settings_c)
+            
+        return segment_settings
 
     def __repr__(self):
         string = "{class_str}: channel = {ch}, global_max = {g}, color = {col},contrast = {c},auto_max = {a},thresh_type = {tt},thresh_upper = {tu}, thresh_lower = {tl},open_kernel = {ok}, close_kernel = {ck}\n".format(class_str = self.__class__.__name__,ch = self.channel_index,g=self.global_max,col=self.color,c=self.contrast,a=self.auto_max,tt=self.thresh_type,tu=self.thresh_upper,tl=self.thresh_lower,ok = self.open_kernel_int,ck = self.close_kernel_int)
@@ -2823,6 +3029,191 @@ class Contour_group:
         n_contours = len(self.contours)
         return "{class_str}: name = {name}, x={x}, y={y}, n_contours={n}".format(class_str = self.__class__.__name__,name=self.name,x=self.x,y=self.y,n = n_contours)
 
+class Image_info:
+    def __init__(self,id,img_path=None,annotation_path=None,manually_reviewed=None):
+        '''
+        Class describing image info
+        
+        Params
+        id                : str  : Unique id-string for object
+        img_path          : str  : Path to image file
+        annotation_path   : str  : Path to annotation file for image
+        manually_reviewed : bool : Whether this image has been manually reviewed
+        '''
+        self.id = id
+        self.img_path = img_path
+        self.annotation_path = annotation_path
+        self.manually_reviewed = manually_reviewed
+    
+    def add_annotation_path(self,session): 
+        '''
+        Add path to annotation from session
+        
+        Params
+        session : Session : instance of session 
+        '''
+        self.annotation_path = session.get_annotation_path(self.id)
+
+    def add_img_path(self,session): 
+        '''
+        Add path to minimal projection from session
+        
+        Params
+        session : Session : instance of session 
+        '''
+        self.img_path = session.get_img_path(self.id)    
+        
+    def __lt__(self,other):
+        return self.id < other.id 
+    
+    
+class Session: 
+    def __init__(self,path,image_infos,index):
+        '''
+        Linking together annotation and the image it annotates
+        
+        Params
+        path        : str                : path to Session file
+        image_infos : list of Image_info : List of class with all necessary info about image
+        index       : int                : position in list of image_info that is currenlty selected
+        '''
+        self.path = path
+        self.image_infos = image_infos
+        self.index = index
+        
+        self.n_images = len(self.image_infos)
+        self.image_numbs = list(range(0,self.n_images))
+        
+        if len(self.image_infos)<1:
+            raise ValueError("image_infos must be a list longer than 0. image_info: "+str(self.image_infos))
+        
+        if len(self.image_infos)<index+1:
+            raise ValueError("index is bigger than the length of image_infos. len(image_infos): "+str(len(self.image_infos))+" index: "+str(index))
+    
+    @classmethod
+    def from_file(self,path):
+        '''
+        Read session file from path
+        
+        Params
+        path : str : path to session file. csv file with fields "id", "root_image", "file_image", "root_annotation", "file_annotation", "manually_reviewed"
+        
+        Returns
+        session : Session : instance of session class 
+        '''
+        df = pd.read_csv(path)
+        df.set_index("id",inplace=True)
+        df["image_numb"] = list(range(0,len(df.index)))
+        
+        image_infos = []
+        for i in df.index:
+            img_path  = os.path.join(df.loc[i,"root_image"],df.loc[i,"file_image"])
+            img_annot = os.path.join(df.loc[i,"root_annotation"],df.loc[i,"file_annotation"])
+            reviewed = df.loc[i,"manually_reviewed"]
+            image_infos.append(Image_info(i,img_path,img_annot,reviewed))
+    
+        index = df.index[0]
+        for i in df.index:
+            if not df.loc[i,'manually_reviewed']:
+                index = df.loc[i,"image_numb"]
+                break
+
+        session = Session(path,image_infos,index)
+        return session
+    
+    def sort(self):
+        #Make image_infos appear in sorted order
+        self.image_infos.sort()
+    
+    def select_first(self,n):
+        '''
+        Select the first n rows for processing
+        
+        Params
+        n : int : selects 0:n first Image_info instances
+        '''
+        self.image_infos = self.image_infos[0:n]
+    
+    def find_missing(self,rawdata_ids): 
+        '''
+        Check if some ids that are found in session file are not found in the rawdata
+
+        Params
+        rawdata_ids : list of str : ids in raw data
+        '''
+        all_ids = []
+        for i in self.image_infos:
+            all_ids.append(i.id)
+        
+        missing_from_stacks = set(set(all_ids)).difference(rawdata_ids)
+        if len(missing_from_stacks)>0:
+            found_in_stacks = set(rawdata_ids).intersection(set(all_ids))
+            raise ValueError("Rawdata missing? IDs from session file not found in stacks: "+str(missing_from_stacks)+"\n\nFound in stacks: "+str(found_in_stacks))
+    
+    def get_n(self):
+        #Return the number of images in session 
+        return self.n_images
+    
+    def reset_index(self):
+        #Set index to start
+        self.index = 0
+    
+    def get_process_info(self):
+        '''
+        Get information relevant to image currently being processed
+        
+        process_info : str : {image_numb}/{tot_images}\t{index}
+        '''
+        return "{image_numb}/{tot_images}\t{index}".format(image_numb = self.index+1,tot_images = self.n_images,index = self.image_infos[self.index].id)
+        
+    def get_img_info(self):
+        '''
+        Get currently selected Image_info instance
+        
+        Returns 
+        img_info : Image_info : instance of currently selected Image_info
+        '''
+        return self.image_infos[self.index]
+    
+    def next_index(self):
+        '''
+        Move to next index in data frame
+        
+        Returns
+        at_end : bool : return True if further incrementing will get you past the end
+        '''
+        
+        if self.index > self.n_images-1:
+            return False
+        else: 
+            self.index = self.index + 1
+            return True
+    
+    def get_n_reviewed(self):
+        #Return the number of images that have been manually reviewed
+        n_manual = 0
+        for i in self.image_infos: 
+            n_manual += i.manually_reviewed
+            
+        return n_manual
+    
+    def write(self):
+        '''
+        Write session file to path
+        '''
+        df = pd.DataFrame()
+        for i in self.image_infos: 
+            root_image,file_image = os.path.split(i.img_path)
+            root_annotation,file_annotation = os.path.split(i.annotation_path)
+            series = {"id":i.id, "root_image":root_image, "file_image":file_image, "root_annotation":root_annotation, "file_annotation":file_annotation, "manually_reviewed":i.manually_reviewed}
+            df.append(series,ignore_index=True)
+            
+        df.to_csv(self.path,index=False)
+    
+    def __repr__(self):
+        string = "Session, path: {p}, df_dim: {d}, current img: {i}".format(p=self.path,d=self.df.shape,i=self.get_process_info())
+        return string
+        
 class Category():
     def __init__(self,name,color_hex,color_human,group,button,show_size):
         '''
@@ -3782,5 +4173,106 @@ class Pdf:
                     self.draw_annotation_pdf(canvas,[x+marg/2,c_height-(y_xmeta+marg/4),img_width-marg,xvars_box_height-marg/4],False,short_info)
             canvas.restoreState()
         canvas.save()
+    
+    @classmethod
+    def img_dim_str_to_tuple(img_dim_str): 
+        #image dimensions stored as string version of tupple in dataframe, convert it to tupple int here
+        img_dim_str = img_dim_str.replace("(","").replace(")","")
+        img_dim = img_dim_str.split(", ",1)
+        img_dim = (int(img_dim[0]),int(img_dim[1]))
+        return img_dim
+
+    @classmethod
+    def plot_images_pdf(self,save_folder,df,file_vars,x_vars,y_vars,image_vars,image_dim,processed_folder,sort_ascending=None,max_size=5000*5000):
+        '''
+        Create PDFs with images grouped after variables
+        
+        Params
+        save_folder      : str          : Folder where pdf is saved
+        df               : pd.Dataframe : Data frame with file paths to images (df["file_path"]) and their variables to sort them by. rows = images, cols = variables
+        file_vars        : list of str  : Column names of varibles used to make different PDF files
+        x_vars           : list of str  : Column names of variables to plot on x-axis
+        y_vars           : list of str  : Column names of variables to plot on y-axis
+        image_vars       : list of str  : Column names of variables to print on top of image
+        image_dim        : tuple of int : image dimensions
+        processed_folder : str          : Path to folder changed images are stored in
+        sort_ascending   : list of bool : Directions to sort each column in, file_vars then y_vars then x_vars. Must be equal in length to 1+len(x_vars)+len(y_vars) (file_vars is compressed to 1 column). True = ascending sort, False = descending sort.  
+        max_size         : int          : max size in tot pixels of image
+        '''
+        
+        os.makedirs(save_folder,exist_ok=True)
+
+        df["file_vars"] = ""
+        sep=""
+        for i in file_vars: 
+            temp = df[i].astype(str).str.replace("_","")
+            df["file_vars"] = df["file_vars"] + sep + temp
+            sep="_"
+        
+        if len(x_vars)==0: 
+            x_vars = ["x"]
+            df["x"]="None"
+            sort_ascending = sort_ascending.append(True)
+        df["x_vars"] = ""
+        for i in x_vars: 
+            temp = df[i].astype(str).str.replace("_","")
+            df["x_vars"] = df["x_vars"] +"_"+ temp
+        
+        if len(y_vars)==0:
+            raise ValueErorr("y_vars must be longer than zero")
+        
+        df["y_vars"] = ""
+        for i in y_vars: 
+            temp = df[i].astype(str).str.replace("_","")
+            df["y_vars"] = df["y_vars"] + "_" + temp
+        
+        if sort_ascending is None: 
+            sort_ascending = [True]*len(["file_vars"]+y_vars+x_vars)
+        df.sort_values(by = ["file_vars"]+y_vars+x_vars,ascending=sort_ascending,inplace=True)
+
+        for f in df["file_vars"].unique():
+            df_f = df[df["file_vars"]==f].copy()
+            xy_positions = pd.DataFrame(index = df_f["y_vars"].unique(),columns = df_f["x_vars"].unique())
+            for x_pos in range(0,len(xy_positions.columns)):
+                for y_pos in range(0,len(xy_positions.index)):
+                    xy_positions.iloc[y_pos,x_pos] = (x_pos,y_pos)
+            
+            df_f["pdf_x_position"] = None 
+            df_f["pdf_y_position"] = None 
+            for i in df_f.index:
+                xy = xy_positions.loc[df_f.loc[i,"y_vars"],df_f.loc[i,"x_vars"]]
+                df_f.loc[i,"pdf_x_position"] = xy[0] 
+                df_f.loc[i,"pdf_y_position"] = xy[1]
+            
+            save_path = os.path.join(save_folder,f+".pdf")
+            self.make_pdf_from_df(save_path,df_f,x_vars,y_vars,image_vars,processed_folder,image_dim,max_size)
+    
+    @classmethod
+    def make_pdf_from_df(self,save_path,df,x_vars,y_vars,image_vars,processed_folder,image_dim,max_size=5000*5000): 
+        '''
+        Input df with images and make a pdf out of them
+        
+        Params
+        save_path        : str          : Path to save pdf in
+        df               : pd.DataFrame : Data frame with paths to images and columns to sort images by
+        x_vars           : list of str  : Column names of variables to plot on x-axis
+        y_vars           : list of str  : Column names of variables to plot on y-axis
+        image_vars       : list of str  : Column names of variables to print on top of image 
+        processed_folder : str          : Path to folder changed images are stored in
+        image_dim        : tuple of int : Image format in pixels [width,height] that the images has to be in
+        max_size         : int          : max size in tot pixels of image
+        '''
+        
+        pdf_imgs = []
+        
+        for i in df.index: 
+            full_path = df.loc[i,"full_path"]
+            x = df.loc[i,"pdf_x_position"]
+            y = df.loc[i,"pdf_y_position"]
+            data = df.loc[i,image_vars+x_vars+y_vars].to_dict()
+            pdf_imgs.append(Image_in_pdf(x,y,full_path,data,x_vars,y_vars,image_vars,processed_folder,image_dim,max_size))
+
+        pdf = Pdf(save_path,pdf_imgs)
+        pdf.make_pdf()
 
 

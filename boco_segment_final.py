@@ -28,7 +28,6 @@ import numpy as np
 import pandas as pd
 import cv2
 
-import classes.image_processing_functions as oi
 import classes.classes as classes
 
 ########################
@@ -43,7 +42,6 @@ if args.debug:
     args.cores = 1
 
 if args.verbose: 
-    oi.VERBOSE = True
     classes.VERBOSE = True
     print("Running boco_segment_final.py in verbose mode",flush=True)
     
@@ -62,22 +60,17 @@ os.makedirs(annotations_folder,exist_ok=True)
 graphic_segmentation_path = os.path.join(args.out_folder,'graphic_segmentation')
 os.makedirs(graphic_segmentation_path,exist_ok=True)
 
-stacks = oi.find_stacks(args.z_planes)
+stacks = classes.Image_evos.find_stacks(args.z_planes)
 
-df, index = oi.load_session_file(args.session_file)
-df["image_numb"] = list(range(1,len(df.index)+1))
-
-missing_from_stacks = set(set(df.index)).difference(stacks["id"])
-if len(missing_from_stacks)>0:
-    found_in_stacks = set(stacks["id"]).intersection(set(df.index))
-    raise ValueError("Rawdata missing? IDs from session file not found in stacks: "+str(missing_from_stacks)+"\n\nFound in stacks: "+str(found_in_stacks))
+session = classes.Session.from_file(args.session_file)
+session.find_missing(stacks["id"])
 
 if not args.n_process is None:
-    df.sort_index(axis="index",inplace = True)
-    df = df.iloc[0:args.n_process,]
+    session.sort()
+    session.select_first(args.n_process)
     if args.verbose: print("Only selecting "+str(args.n_process)+" images, as set with --n_process",flush=True)
 
-print("Found "+str(len(df.index))+" images. Of which "+str(df["manually_reviewed"].sum())+" is already reviewed",flush=True)
+print("Found "+str(session.get_n())+" images. Of which "+str(session.get_n_reviewed())+" is already reviewed",flush=True)
 
 annotations = []
 if os.path.exists(args.annotations): 
@@ -88,18 +81,24 @@ if os.path.exists(args.annotations):
         annotations.append(classes.Annotation.load_from_file(os.path.join(args.annotations,a),categories))
     if args.verbose: print("Found "+str(len(annotations))+ " annotation files\n")
 
-def main(df,index,stacks,annotations,categories,annotations_folder):
-    if args.verbose: print("")
-    print(str(df.loc[index,'image_numb'])+"/"+str(len(df.index))+"\tid: "+index + "\tProcessing image",flush=True)
+def main(image_info,process_info,stacks,annotations,categories,annotations_folder):
+    '''
+    Process one EVOS z_stack
+    
+    Params
+    image_info          : Image_info          : information about image to process
+    process_info        : str                 : info about image that is currently being processed
+    stacks              : pd.DataFrame        : Dataframe with raw paths to all images
+    annotations         : list of Annotation  : list of class with annotational data
+    categories          : Categories          : class with information about categories
+    annotations_folder  : str                 : Path to where annotations are written
+    '''
+    if args.verbose: print("",flush=True)
+    print(process_info+ "\tProcessing image",flush=True)
    
-    min_projection_name = df.loc[index,"file_image"]
-    min_projection_path = os.path.join(df.loc[index,"root_image"],min_projection_name)
+    z_planes = list(stacks.loc[stacks['id']==image_info.id,"full_path"])
     
-    z_planes = list(stacks.loc[stacks['id']==index,"full_path"])
-    edges = oi.find_edges(z_planes)
-    
-    channel = classes.Channel(min_projection_path,channel_index = 0,z_index = 0,color = (255,255,255),categories = categories)
-    channel.mask = edges
+    channel = classes.Image_evos(z_planes).get_channel(image_info.img_path,categories)
     if args.verbose: print("\tFinding contours",flush=True)
     channel.find_contours()
     if args.verbose: print("\tAdding annotations")
@@ -124,18 +123,23 @@ if args.cores is None:
     cores = mp.cpu_count()-1
 else:
     cores = args.cores
-    
+
+session.reset_index()
 if cores==1: 
-    for index in df.index:
-        main(df,index,stacks,annotations,categories,annotations_folder)
+    while True:
+        main(session.get_img_info(),session.get_process_info(),stacks,annotations,categories,annotations_folder)
+        if session.next_index():
+            break
         
 else: 
     pool = mp.Pool(cores)
     
     result = []
-    for index in df.index:
-        result.append(pool.apply_async(main,args=(df,index,stacks,annotations,categories,annotations_folder)))
-
+    while True:
+        result.append(pool.apply_async(main,args=(session.get_img_info(),session.get_process_info(),stacks,annotations,categories,annotations_folder)))
+        if session.next_index():
+            break
+            
     pool.close()
     pool.join()
     

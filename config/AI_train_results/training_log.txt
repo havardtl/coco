@@ -1,0 +1,4 @@
+Training log from KERAS model 
+created on xx.xx.xx
+keras_data_format=channels_last
+keras_backend=tensorflow
