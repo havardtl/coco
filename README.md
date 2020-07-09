@@ -41,17 +41,9 @@ ilastic can achieve a lot of the same image segmentation and classification as b
 
 [2] Rueden C. et al. (2017), "ImageJ2: ImageJ for the next generation of scientific image data", BMC Bioinformatics, doi: https://doi.org/10.1186/s12859-017-1934-z
 
-### How can I get imagej to open files windowless? 
-1. Open FIJI2. Navigate to Plugins > Bio-Formats > Bio-Formats Plugins Configuration
-3. Select Formats
-4. Select your desired file format (e.g. “Zeiss CZI”) and select “Windowless”
-
 ## Todo: 
-- Remove code that tries to analyze stuff in 3D
-- Put as much as possible of the code into functions with comments. 
 - Simplify scripts into main commands "coco" and "boco" with sup-options
-- Write jupiter notebook with example of usage. 
-- Add possibility to add manual annotation of organoids and other annotations
+- Write jupyter notebook with example of usage. 
 - Add log file for each run so that you know settings used to segment. (git log -1 --format="%H" gives commit hash)
 
 
