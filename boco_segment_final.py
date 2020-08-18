@@ -28,7 +28,9 @@ import numpy as np
 import pandas as pd
 import cv2
 
-import classes.classes as classes
+from coco_package import image_processing
+from coco_package import raw_image_read
+from coco_package import info
 
 ########################
 # setup 
@@ -42,7 +44,8 @@ if args.debug:
     args.cores = 1
 
 if args.verbose: 
-    classes.VERBOSE = True
+    image_processing.set_verbose()
+    raw_image_read.set_verbose()
     print("Running boco_segment_final.py in verbose mode",flush=True)
     
 if args.single_objects is not None:
@@ -60,9 +63,9 @@ os.makedirs(annotations_folder,exist_ok=True)
 graphic_segmentation_path = os.path.join(args.out_folder,'graphic_segmentation')
 os.makedirs(graphic_segmentation_path,exist_ok=True)
 
-stacks = classes.Image_evos.find_stacks(args.z_planes)
+stacks = raw_image_read.Image_evos.find_stacks(args.z_planes)
 
-session = classes.Session.from_file(args.session_file)
+session = info.Session.from_file(args.session_file)
 session.find_missing(stacks["id"])
 
 if not args.n_process is None:
@@ -74,11 +77,11 @@ print("Found "+str(session.get_n())+" images. Of which "+str(session.get_n_revie
 
 annotations = []
 if os.path.exists(args.annotations): 
-    categories = classes.Categories.load_from_file(args.categories)
+    categories = info.Categories.load_from_file(args.categories)
     
     annotation_files = os.listdir(args.annotations)
     for a in annotation_files: 
-        annotations.append(classes.Annotation.load_from_file(os.path.join(args.annotations,a),categories))
+        annotations.append(info.Annotation.load_from_file(os.path.join(args.annotations,a),categories))
     if args.verbose: print("Found "+str(len(annotations))+ " annotation files\n")
 
 def main(image_info,process_info,stacks,annotations,categories,annotations_folder):
@@ -98,7 +101,7 @@ def main(image_info,process_info,stacks,annotations,categories,annotations_folde
    
     z_planes = list(stacks.loc[stacks['id']==image_info.id,"full_path"])
     
-    channel = classes.Image_evos(z_planes).get_channel(image_info.img_path,categories)
+    channel = raw_image_read.Image_evos(z_planes).get_channel(image_info.img_path,categories)
     if args.verbose: print("\tFinding contours",flush=True)
     channel.find_contours()
     if args.verbose: print("\tAdding annotations")

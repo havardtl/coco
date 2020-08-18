@@ -32,14 +32,17 @@ import cv2
 import pickle
 import shutil
 
-import utilities.classes as classes
+from coco_package import image_processing
+from coco_package import raw_image_read
+from coco_package import info
+from coco_package import make_pdf
 
 ##############################
 # Run program
 ##############################
 this_script_folder = os.path.dirname(os.path.abspath(os.path.realpath(__file__)))
 if args.categories is None: 
-    args.categories = os.path.join(this_script_folder,"utilities","coco_categories.csv")
+    args.categories = os.path.join(this_script_folder,"config","coco_categories.csv")
 
 if not os.path.exists(args.annotation_file): 
     cmd = "coco_make_annotation_file.py"
@@ -54,9 +57,14 @@ if args.overwrite:
 if args.debug: 
     args.cores = 1
     args.verbose = True
-    
-classes.VERBOSE = args.verbose
-classes.TEMP_FOLDER = args.temp_folder 
+
+if args.verbose:
+    image_processing.set_verbose()
+    raw_image_read.set_verbose()
+    info.set_verbose()
+    make_pdf.set_verbose()
+
+image_processing.TEMP_FOLDER = args.temp_folder 
 
 pdf_processed_images_folder = os.path.join(args.temp_folder,"pdf_processed_images")
 
@@ -71,18 +79,18 @@ pickle_path = os.path.join(args.temp_folder,"coco_plot_images_df.pickle")
 raw_imgs = []
 for i in os.listdir(args.raw_data): 
     raw_path = os.path.join(args.raw_data,i)
-    img_i = classes.Image_czi(raw_path,args.temp_folder,args.extracted_images_folder)
+    img_i = raw_image_read.Image_czi(raw_path,args.extracted_images_folder)
     raw_imgs.append(img_i)
 raw_imgs.sort()
 
 print("Found {n_files} to process".format(n_files = len(raw_imgs)),flush=True)
 
-categories = classes.Categories.load_from_file(args.categories)
+categories = info.Categories.load_from_file(args.categories)
 
 if not args.n_process is None:
     raw_imgs = raw_imgs[0:args.n_process]
 
-segment_settings = classes.Segment_settings.excel_to_segment_settings(args.annotation_file)
+segment_settings = image_processing.Segment_settings.excel_to_segment_settings(args.annotation_file)
 
 def main(image_info,info,segment_settings,categories):
     '''
@@ -154,16 +162,16 @@ print(type(df),flush=True)
 print(df["img_dim"].mode(),flush=True)
 
 most_common_img_dim = str(df["img_dim"].mode()[0])
-image_dim_goal = classes.Pdf.img_dim_str_to_tuple(most_common_img_dim)
+image_dim_goal = make_pdf.Pdf.img_dim_str_to_tuple(most_common_img_dim)
 image_dim_goal = (int(image_dim_goal[0]),int(image_dim_goal[1]))
 
 print("Adding annotation info from: "+args.annotation_file,flush=True)
-annotation = pd.read_excel(args.annotation_file,sheet_name = classes.ANNOTATION_SHEET)
+annotation = pd.read_excel(args.annotation_file,sheet_name = image_processing.ANNOTATION_SHEET)
 print(annotation,flush=True)
 annotation.drop("full_path",axis="columns",inplace=True)
 df = df.merge(annotation,on="file_id",how="left")
 
-plot_vars = pd.read_excel(args.annotation_file,sheet_name = classes.PLOT_VARS_SHEET)
+plot_vars = pd.read_excel(args.annotation_file,sheet_name = image_processing.PLOT_VARS_SHEET)
 
 df["pdf_file"] = os.path.splitext(os.path.split(args.annotation_file)[1])[0]
 
@@ -181,5 +189,5 @@ y_vars_sortdirs = list(plot_vars.loc[plot_vars["plot_axis"]=="y","sort_ascending
 
 sort_directions = file_vars_sortdirs+y_vars_sortdirs+x_vars_sortdirs
 
-classe.Pdf.plot_images_pdf(args.projections_pdf_folder,df,file_vars,x_vars,y_vars,image_vars,image_dim_goal,pdf_processed_images_folder,sort_directions)
+make_pdf.Pdf.plot_images_pdf(args.projections_pdf_folder,df,file_vars,x_vars,y_vars,image_vars,image_dim_goal,pdf_processed_images_folder,sort_directions)
 

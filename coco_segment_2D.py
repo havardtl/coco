@@ -10,7 +10,7 @@ parser.add_argument('--raw_file',type=str,help='Supply a single raw file to proc
 parser.add_argument('--settings_file',type=str,default='annotation1.xlsx',help="Excel file with segmentation settings for channels. Make it with coco_make_annotation_file.py.")
 parser.add_argument('--annotations',type=str,default='annotations',help="Folder with annotation of channel images")
 parser.add_argument('--masks',type=str,default=None,help="Folder with masks. If supplied, z-stacks are split into one z_stack per mask. Naming convention for masks: '{file_id}_*_MASK_{mask_name}.*'. 255 = area to keep. NB! Black holes in masks are ignored, so avoid donut like shapes as masks.")
-parser.add_argument('--categories',type=str,help='File to load category information from. Default is to load it from default file in utilities/coco_categories.csv')
+parser.add_argument('--categories',type=str,help='File to load category information from. Default is to load it from default file in config/coco_categories.csv')
 parser.add_argument('--out_contours',type=str,default = 'stats/2D_contours_stats', help='Output folder for stats about contours')
 parser.add_argument('--out_graphical',type=str,default = 'graphical/2D_graphic_segmentation', help='Output folder for graphical representation of segmentation')
 parser.add_argument('--temp_folder',type=str,default='raw/temp',help="temp folder for storing temporary files.")
@@ -33,7 +33,9 @@ import cv2
 import numpy as np 
 import pandas as pd
 
-import utilities.classes as classes
+from coco_package import image_processing
+from coco_package import info
+from coco_package import raw_image_read
 
 import pickle
 import shutil
@@ -43,7 +45,7 @@ import shutil
 ##############################
 this_script_folder = os.path.dirname(os.path.abspath(os.path.realpath(__file__)))
 if args.categories is None: 
-    args.categories = os.path.join(this_script_folder,"utilities","coco_categories.csv")
+    args.categories = os.path.join(this_script_folder,"config","coco_categories.csv")
 
 if not os.path.exists(args.settings_file): 
     cmd = "coco_make_annotation_file.py"
@@ -67,11 +69,11 @@ if args.raw_file is None:
     raw_imgs = []
     for i in os.listdir(args.raw_folder): 
         raw_path = os.path.join(args.raw_folder,i)
-        img_i = classes.Image_czi(raw_path,args.extracted_images_folder)
+        img_i = raw_image_read.Image_czi(raw_path,args.extracted_images_folder)
         raw_imgs.append(img_i)
     raw_imgs.sort()
 else: 
-    raw_imgs = [classes.Image_czi(args.raw_file,args.extracted_images_folder)]
+    raw_imgs = [raw_image_read.Image_czi(args.raw_file,args.extracted_images_folder)]
     args.cores = 1
 
 if not args.n_process is None:
@@ -81,24 +83,28 @@ if args.debug:
     args.cores = 1
     args.verbose = True
 
-classes.VERBOSE = args.verbose
-classes.CONTOURS_STATS_FOLDER = args.out_contours 
-classes.TEMP_FOLDER = args.temp_folder 
-classes.GRAPHICAL_SEGMENTATION_FOLDER = args.out_graphical
+if args.verbose: 
+    image_processing.set_verbose()
+    raw_image_read.set_verbose()
+    info.set_verbose()
+
+image_processing.CONTOURS_STATS_FOLDER = args.out_contours 
+image_processing.TEMP_FOLDER = args.temp_folder 
+image_processing.GRAPHICAL_SEGMENTATION_FOLDER = args.out_graphical
 
 print("Found {n_files} to process".format(n_files = len(raw_imgs)),flush=True)
-segment_settings = classes.Segment_settings.excel_to_segment_settings(args.settings_file)
+segment_settings = image_processing.Segment_settings.excel_to_segment_settings(args.settings_file)
 
-categories = classes.Categories.load_from_file(args.categories)
+categories = info.Categories.load_from_file(args.categories)
 
 annotations = []
 if os.path.exists(args.annotations): 
     annotation_files = os.listdir(args.annotations)
     for a in annotation_files: 
-        annotations.append(classes.Annotation.load_from_file(os.path.join(args.annotations,a),categories))
+        annotations.append(info.Annotation.load_from_file(os.path.join(args.annotations,a),categories))
     if args.verbose: print("Found "+str(len(annotations))+ " annotation files",flush=True)
 
-masks = classes.Mask.get_mask_list(args.masks)
+masks = image_processing.Mask.get_mask_list(args.masks)
 
 def main(image_info,segment_settings,annotations,masks,info,categories):
     '''

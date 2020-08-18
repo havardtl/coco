@@ -17,9 +17,8 @@ args = parser.parse_args()
 # Dependencies and variables
 ##############################
 import os 
-
-import classes.classes as classes
-import classes.visual_editor as ve
+from coco_package import visual_editor
+from coco_package import info
 
 ############################
 # Run program
@@ -29,8 +28,8 @@ this_script_folder = os.path.dirname(os.path.abspath(os.path.realpath(__file__))
 if args.categories is None: 
     args.categories = os.path.join(this_script_folder,"config","boco_categories.csv")
 
-categories = classes.Categories.load_from_file(args.categories)
-current_img = ve.Current_Img(args.session_file,args.from_first,args.height,args.epsilon,args.zoom)
+categories = info.Categories.load_from_file(args.categories)
+current_img = visual_editor.Current_Img(args.session_file,args.from_first,args.height,args.epsilon,args.zoom)
 
-mainwindow = ve.MainWindow(categories,current_img)
+mainwindow = visual_editor.MainWindow(categories,current_img)
 

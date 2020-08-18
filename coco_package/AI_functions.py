@@ -8,6 +8,9 @@ import datetime
 
 VERBOSE = False
 
+def set_verbose():
+    VERBOSE = True
+
 class Training_data:
     def __init__(self,training_dir,validation_dir,validation_n,image_extension = ".png"):
         '''

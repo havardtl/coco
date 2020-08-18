@@ -6,7 +6,7 @@ import datetime
 import math
 import copy
 
-import classes.classes as classes
+from coco_package import info
 
 class Zoomed_Img():
 
@@ -312,12 +312,12 @@ class Current_Img():
 
     def save_annotation(self):
         #Save annotation file
-        classes.Annotation.write_annotation_file(self.annot_path,self.reviewed_by_human,self.changelog,self.annotation,self.next_object_id)
+        info.Annotation.write_annotation_file(self.annot_path,self.reviewed_by_human,self.changelog,self.annotation,self.next_object_id)
         print("\tSaved annotation to "+self.annot_path,flush=True)
         
     def load_annotation(self):
         #Load annotation file 
-        self.reviewed_by_human,self.changelog,self.annotation,self.next_object_id = classes.Annotation.read_annotation_file(self.annot_path)
+        self.reviewed_by_human,self.changelog,self.annotation,self.next_object_id = info.Annotation.read_annotation_file(self.annot_path)
         self.reviewed_by_human = True
         self.changelog = self.changelog + self.today + " manually_reviewed\n"
         self.id = os.path.split(self.annot_path)[1]
@@ -358,7 +358,7 @@ class Current_Img():
             self.annotation = self.annotation.append(temp,ignore_index=True,sort=False)
         
 class Session(): 
-    
+    #TODO: merge this Session class with the one in info.Session
     def __init__(self,session_file,from_first): 
         '''
         Class containing info about all images and which one is selected

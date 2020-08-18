@@ -37,20 +37,20 @@ import cv2
 import numpy as np 
 import pandas as pd
 
-import classes.classes as classes
-import classes.AI_functions as ai
+from coco_package import image_processing,info,raw_image_read,AI_functions
 
-#classes.load_neural_network()
 ########################
 # setup 
 ########################
-
 if args.debug: 
     args.verbose = True
     args.cores = 1
 
 if args.verbose: 
-    classes.VERBOSE = True
+    image_processing.set_verbose()
+    info.set_verbose()
+    raw_image_read.set_verbose()
+    AI_functions.set_verbose()
     print("Running boco_segment_initial.py in verbose mode")
     print("opencv version: "+str(cv2.__version__))
 
@@ -65,9 +65,9 @@ os.makedirs(args.out_projections,exist_ok=True)
 os.makedirs(args.out_segmented_well,exist_ok=True)
 os.makedirs(args.out_annotations,exist_ok=True)
 
-categories = classes.Categories.load_from_file(args.categories)
+categories = info.Categories.load_from_file(args.categories)
 
-stacks = classes.Image_evos.find_stacks(args.z_planes)
+stacks = raw_image_read.Image_evos.find_stacks(args.z_planes)
 
 df = pd.DataFrame(columns = ["id","root_image","file_image","root_annotation","file_annotation","manually_reviewed"])
 image_ids = list(set(stacks["id"]))
@@ -81,7 +81,7 @@ if not args.n_process is None:
 
 print("found {n_stacks} stacks belonging to {n_wells} wells, {avg_stacks} stacks per well\n".format(n_stacks = len(stacks.index),n_wells = n_wells,avg_stacks = stacks_per_image))
 
-ai_predict = ai.AI_predict(ai.AI(args.AI_folder))
+ai_predict = AI_functions.AI_predict(AI_functions.AI(args.AI_folder))
 
 def main(index,image_numb,tot_images,stacks,categories,ai_predict):
     '''
@@ -115,7 +115,7 @@ def main(index,image_numb,tot_images,stacks,categories,ai_predict):
     changelog = today+" segmented_images\n"
     
     z_planes = list(stacks["full_path"][stacks['id']==index])
-    channel = classes.Image_evos(z_planes).get_channel(min_projection_path,categories)
+    channel = raw_image_read.Image_evos(z_planes).get_channel(min_projection_path,categories)
     
     if args.verbose: print("\tFinding contours",flush=True)
     channel.find_contours(min_contour_area = args.minimum_size)

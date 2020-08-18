@@ -12,7 +12,7 @@ parser.add_argument('--height',type=int,default=1350,help='Resize image to this 
 parser.add_argument('--zoom',type=float,default=2,help='number of pixels to show per window pixel when using zoom mode')
 parser.add_argument('--epsilon',type=float,default=2,help='Size of rectangles for each object')
 parser.add_argument('--from_first',action='store_true',help='Default is to start from the last manual reviewed, with this switch you start from first')
-parser.add_argument('--categories',type=str,help='File to load category information from. Default is to load it from default file in utilities/categories.csv')
+parser.add_argument('--categories',type=str,help='File to load category information from. Default is to load it from default file in config/categories.csv')
 parser.add_argument('--filter',type=str,default=None,help='Only include files that have these strings when making session file. Separate multiple filters with comma. With multiple filters all files with either or both filters are included.')
 args = parser.parse_args()
 
@@ -27,7 +27,7 @@ import pandas as pd
 #######################
 this_script_folder = os.path.dirname(os.path.abspath(os.path.realpath(__file__)))
 if args.categories is None: 
-    args.categories = os.path.join(this_script_folder,"utilities","coco_categories.csv")
+    args.categories = os.path.join(this_script_folder,"config","coco_categories.csv")
 
 if args.from_first: 
     from_first = " --from_first"
