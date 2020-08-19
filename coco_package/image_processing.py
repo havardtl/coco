@@ -147,7 +147,7 @@ class Segment_settings:
         if pd.isna(size): 
             return None 
         
-        size = int(size)
+        size = int(float(size))
         kernel = np.ones((size,size),np.uint8)
         return kernel
      
