@@ -6,6 +6,7 @@ import os
 VERBOSE = False
 
 def set_verbose(): 
+    global VERBOSE
     VERBOSE = True
 
 class Image_info:

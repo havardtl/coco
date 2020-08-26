@@ -42,6 +42,7 @@ contour_id_counter = 0
 #####################################
 
 def set_verbose(): 
+    global VERBOSE
     VERBOSE = True
     info.set_verbose()
     make_pdf.set_verbose()

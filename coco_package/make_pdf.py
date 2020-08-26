@@ -3,11 +3,13 @@
 import cv2
 import os
 import math
+import numpy as np
 import pandas as pd
 
 VERBOSE = False
 
 def set_verbose(): 
+    global VERBOSE
     VERBOSE = True
 
 class Image_in_pdf:

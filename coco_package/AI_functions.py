@@ -9,6 +9,7 @@ import datetime
 VERBOSE = False
 
 def set_verbose():
+    global VERBOSE
     VERBOSE = True
 
 class Training_data:

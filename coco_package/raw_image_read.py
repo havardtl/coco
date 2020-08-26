@@ -11,6 +11,7 @@ from coco_package import image_processing
 VERBOSE = False
 
 def set_verbose(): 
+    global VERBOSE
     VERBOSE = True
     image_processing.set_verbose()
 
