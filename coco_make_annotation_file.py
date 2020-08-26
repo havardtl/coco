@@ -19,7 +19,7 @@ from io import StringIO
 import re
 import pandas as pd
 
-import utilities.classes as classes
+from coco_package import image_processing
 
 ##########################
 # Functions
@@ -125,14 +125,14 @@ plot_vars.loc[plot_vars["variable"]=="is_control","sort_ascending"] = False
 plot_vars.sort_values(by = ["plot_axis","importance","variable"],ascending=False,axis="index",inplace=True)
 
 #Import defaults from DEFAULT_SETTINGS_XLSX
-test_settings    = pd.read_excel(classes.DEFAULT_SETTINGS_XLSX,sheet_name = classes.TEST_SETTINGS_SHEET)
-segment_settings = pd.read_excel(classes.DEFAULT_SETTINGS_XLSX,sheet_name = classes.SEGMENT_SETTINGS_SHEET)
+test_settings    = pd.read_excel(image_processing.DEFAULT_SETTINGS_XLSX,sheet_name = image_processing.TEST_SETTINGS_SHEET)
+segment_settings = pd.read_excel(image_processing.DEFAULT_SETTINGS_XLSX,sheet_name = image_processing.SEGMENT_SETTINGS_SHEET)
 
 with pd.ExcelWriter(args.annotation_file) as writer: 
-    df.to_excel(writer,sheet_name=classes.ANNOTATION_SHEET,index=False)
-    plot_vars.to_excel(writer,sheet_name=classes.PLOT_VARS_SHEET,index=False)
-    test_settings.to_excel(writer,sheet_name=classes.TEST_SETTINGS_SHEET,index=False)
-    segment_settings.to_excel(writer,sheet_name=classes.SEGMENT_SETTINGS_SHEET,index=False)
+    df.to_excel(writer,sheet_name=image_processing.ANNOTATION_SHEET,index=False)
+    plot_vars.to_excel(writer,sheet_name=image_processing.PLOT_VARS_SHEET,index=False)
+    test_settings.to_excel(writer,sheet_name=image_processing.TEST_SETTINGS_SHEET,index=False)
+    segment_settings.to_excel(writer,sheet_name=image_processing.SEGMENT_SETTINGS_SHEET,index=False)
 
 print("Wrote annotation info to: "+args.annotation_file,flush=True)
 
