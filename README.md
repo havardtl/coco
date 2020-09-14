@@ -13,11 +13,11 @@ Lindholm et al. (June 2020). "Developmental pathways regulate cytokine-driven ef
 Use at your own risk. This repository is not actively maintained, but you are welcome to open an issue and I might look at it.  
 
 ## Installation
-It is recommended to install dependencies with conda. I had success with python 3.6 using the following commands: 
+It is recommended to install dependencies with conda. I had success with python 3.8 using the following commands: 
 
 `conda config --add channels conda-forge`
 
-`conda install opencv pandas openpyxl xlrd reportlab`
+`conda install opencv pandas openpyxl xlrd reportlab matplotlib`
 
 I used .czi files from ZEISS for confocal image analysis. These where imported using the aicspylibczi library which can be installed with:
 
