@@ -10,8 +10,6 @@ All python scripts in main folder are runnable as command line programs. Run the
 Details of implementation and example of use can be found in the following paper. Please cite if you use this program. 
 Lindholm et al. (June 2020). "Developmental pathways regulate cytokine-driven effector and feedback responses in the intestinal epithelium". bioRxiv. DOI/URL: https://doi.org/10.1101/2020.06.19.160747 
 
-Use at your own risk. This repository is not actively maintained, but you are welcome to open an issue and I might look at it.  
-
 ## Installation
 It is recommended to install dependencies with conda. I had success with python 3.8 using the following commands: 
 
@@ -42,7 +40,6 @@ ilastic can achieve a lot of the same image segmentation and classification as b
 [2] Rueden C. et al. (2017), "ImageJ2: ImageJ for the next generation of scientific image data", BMC Bioinformatics, doi: https://doi.org/10.1186/s12859-017-1934-z
 
 ## Todo: 
-- Simplify scripts into main commands "coco" and "boco" with sup-options
 - Write jupyter notebook with example of usage. 
 - Add log file for each run so that you know settings used to segment. (git log -1 --format="%H" gives commit hash)
 
