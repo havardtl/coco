@@ -31,14 +31,6 @@ Add folder with coco scripts to PATH by adding this line to your .bashrc:
 
 Open the folder with images you want to analyze in bash and type the command you want to use. 
 
-## FAQ
-### What alternatives are there to this program?
-ilastic can achieve a lot of the same image segmentation and classification as boco[1]. Macros in ImageJ can achieve most of the analysis except neural network based classification[2].
-
-[1] Stuart Berg et al. (2019). "lastik: interactive machine learning for (bio)image analysis". Nature Methods. doi: https://doi.org/10.1038/s41592-019-0582-9 website: https://www.ilastik.org/
-
-[2] Rueden C. et al. (2017), "ImageJ2: ImageJ for the next generation of scientific image data", BMC Bioinformatics, doi: https://doi.org/10.1186/s12859-017-1934-z
-
 ## Todo: 
 - Write jupyter notebook with example of usage. 
 - Add log file for each run so that you know settings used to segment. (git log -1 --format="%H" gives commit hash)
