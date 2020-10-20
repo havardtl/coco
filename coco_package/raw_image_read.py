@@ -5,6 +5,9 @@ import numpy as np
 import pandas as pd
 import cv2
 import copy 
+import aicspylibczi
+import pathlib
+import xml.etree.ElementTree as ET
 
 from coco_package import image_processing
 
@@ -279,15 +282,22 @@ class Image_czi:
             images = []
             for z_index in this_z["z_index"].unique():
                 this_image = this_z.loc[this_z["z_index"]==z_index,]
+                
                 channels = []
                 for i in this_image.index: 
                     color = None
                     global_max = None
+                    found_segment_settings = False
                     for j in segment_settings: 
                         if str(j.channel_index) == str(this_image.loc[i,"channel_index"]):
                             color = j.color
                             global_max = j.global_max
-                            break 
+                            found_segment_settings = True
+                            break
+                            
+                    if not found_segment_settings: 
+                        raise ValueError("Did not find segment settings for channel "+str(i))
+                    
                     channel = image_processing.Channel(this_image.loc[i,"full_path"],this_image.loc[i,"channel_index"],this_image.loc[i,"z_index"],color,categories,global_max)
                     channels.append(channel)
                 images.append(image_processing.Image(channels,z_index,segment_settings))

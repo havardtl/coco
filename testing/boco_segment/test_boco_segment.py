@@ -71,7 +71,7 @@ checked_values = []
 
 df = pd.read_csv("annotations/HL32_2_A03_d02.txt",sep=";",skiprows = 5)
 
-print(df[["channel_id","area","equivalent_radius","annotation_this_channel_type","annotation_other_channel_type"]])      
+print(df[["channel_id","center_x","center_y","area","equivalent_radius","annotation_this_channel_type","annotation_other_channel_type"]])      
 
 check_value("n_objects",len(df.index),2,checked_values)
 check_value("n_spheroid",sum(df["annotation_this_channel_type"]=="Spheroid"),1,checked_values)

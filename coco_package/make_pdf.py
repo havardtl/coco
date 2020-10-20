@@ -6,11 +6,14 @@ import math
 import numpy as np
 import pandas as pd
 
+from coco_package import image_processing
+
 VERBOSE = False
 
 def set_verbose(): 
     global VERBOSE
     VERBOSE = True
+    #image_processing.set_verbose()
 
 class Image_in_pdf:
     
@@ -71,6 +74,7 @@ class Image_in_pdf:
     
     def to_right_ratio(self):
         #If image has a different ratio than Crop image so that it has the goal_img_dim ratio. 
+        #TODO: is this not the same code as pad_img_to_box? Unnecessary duplicate in that case
         img_ratio = float(self.img_dim[1])/float(self.img_dim[0])
         if not ((self.goal_ratio - 0.01) < img_ratio < (self.goal_ratio + 0.01)):
             #if VERBOSE: print("Changing ratio")
@@ -83,8 +87,8 @@ class Image_in_pdf:
                 new_width  = int(self.img_dim[1])
                 new_height = int((1/self.goal_ratio)*float(self.img_dim[1]))
                 
-            right_ratio_rectangle = Rectangle([0,0,new_width,new_height])
-            self.img = Channel.imcrop(self.img,right_ratio_rectangle,value=(150,150,150))
+            right_ratio_rectangle = image_processing.Rectangle([0,0,new_width,new_height])
+            self.img = image_processing.Channel.imcrop(self.img,right_ratio_rectangle,value=(150,150,150))
             self.img_dim = self.img.shape
     
     def to_max_size(self):

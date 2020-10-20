@@ -9,9 +9,6 @@ import cv2
 from io import StringIO 
 import copy
 import datetime
-import aicspylibczi
-import pathlib
-import xml.etree.ElementTree as ET
 
 from coco_package import info
 from coco_package import make_pdf
@@ -28,8 +25,9 @@ CONTOURS_STATS_FOLDER = "contour_stats"
 GRAPHICAL_SEGMENTATION_FOLDER = "segmented_graphical"
 
 THIS_SCRIPT_FOLDER = os.path.split(os.path.abspath(__file__))[0]
+CONFIG_FOLDER = os.path.join(os.path.split(THIS_SCRIPT_FOLDER)[0],"config")
 
-DEFAULT_SETTINGS_XLSX = os.path.join(THIS_SCRIPT_FOLDER,"default_annotations.xlsx")
+DEFAULT_SETTINGS_XLSX = os.path.join(CONFIG_FOLDER,"default_annotations.xlsx")
 TEST_SETTINGS_SHEET = "test_settings"
 SEGMENT_SETTINGS_SHEET = "segment_settings"
 ANNOTATION_SHEET = "annotation"
@@ -1290,7 +1288,7 @@ class Channel:
 
             if add_contour_numbs:
                 all_ids = ",".join(c.annotation_this_channel_id)
-                xy = (int(c.data["centroid_x"]*scale),int(c.data["centroid_y"]*scale))
+                xy = (int(c.data["center_x"]*scale),int(c.data["center_y"]*scale))
                 cv2.putText(img,all_ids,xy,cv2.FONT_HERSHEY_SIMPLEX,0.5,color,1,cv2.LINE_AA)
 
         img_w_contour_path = os.path.join(img_w_contour_folder,self.file_id+".png")
@@ -1309,6 +1307,11 @@ class Channel:
         Returns
         color    : np.array    : BGR image
         '''
+        if gray_img is None: 
+            raise ValueError("image variable is None")
+        if bgr is None: 
+            raise ValueError("bgr variable is None")
+            
         color = np.zeros((gray_img.shape[0],gray_img.shape[1],3),np.uint8)
         color[:] = bgr
         gray_img = cv2.cvtColor(gray_img,cv2.COLOR_GRAY2BGR)
@@ -1990,7 +1993,6 @@ class Contour:
                 center = np.unravel_index(center,only_contour_dist.shape)
                 xc = center[1] + self.contour_box.top_left.x 
                 yc = center[0] + self.contour_box.top_left.y 
-                
                 self.distance_centers.append((xc,yc))
         else: 
             raise ValueError("Contour should not completely dissappear, but it did.")
@@ -2063,13 +2065,13 @@ class Contour:
             object_id = None 
         
         if self.distance_centers is None: 
-            self.find_distance_centers(None,None,None)
+            self.find_distance_centers(None,None,None) 
         
         distance_center = [None,None] 
         if self.distance_centers is not None: 
-            if len(self.distance_centers) == 1: 
-                distance_centers = self.distance_centers[0]
-
+            if len(self.distance_centers)==1: 
+                distance_center = self.distance_centers[0]
+        
         data = {
             "img_dim_yx":str(self.img_dim),
             "area":area,
@@ -2084,8 +2086,6 @@ class Contour:
             "equivalent_radius":np.sqrt(area/np.pi),
             "circularity":float(4)*np.pi*area/(perimeter*perimeter),
             "at_edge":self.is_at_edge(),
-            #"next_z_overlapping":self.contour_list_as_str(self.next_z_overlapping), 
-            #"prev_z_overlapping":self.contour_list_as_str(self.prev_z_overlapping), 
             "is_inside":self.contour_list_as_str(self.is_inside),
             "manually_reviewed": self.manually_reviewed,
             "type": object_type,

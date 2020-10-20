@@ -16,7 +16,7 @@ parser.add_argument('--AI_folder',type=str,default=None,help='Path to folder wit
 parser.add_argument('--out_treatment_xlsx',type=str,default='treatment_info.xlsx',help='Excel file where the user can submit treatment information. Only made if does not exist.')
 parser.add_argument('--out_process_annotations_rscript',type=str,default='process_annotations.R',help='Copy R script for processing annotations into this location.')
 parser.add_argument('--dryrun',action='store_true',default=False,help='Do everything except processing images.')
-parser.add_argument('--cores',type=int,help='Number of cores to use. Default is number of cores minus 1.')
+parser.add_argument('--cores',type=int,default=1,help='Number of cores to use.')
 parser.add_argument('--verbose',action='store_true',default=False,help="Print statements about program state as it runs")
 parser.add_argument('--debug',action='store_true',default=False,help='debug mode, no parallel processing and verbose')
 parser.add_argument('--n_process',type=int,help='Process the n first alphabetically sorted wells')

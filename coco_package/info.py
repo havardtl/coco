@@ -524,7 +524,7 @@ class Annotation:
             df = df.loc[:,["center_x","center_y","type","object_id"]].copy()
         else:
             df = pd.DataFrame(columns = ["center_x","center_y","type","object_id"])
-            
+
         return reviewed_by_human,changelog,df,next_object_id 
 
     @classmethod

@@ -12,8 +12,7 @@
 
 eval "$(command conda 'shell.bash' 'hook' 2> /dev/null)"
 
-module load Java
 conda activate coco2
 
-boco_segment_initial.py --cores 5 > last_run.txt
+boco_segment_initial.py --cores 5 &> last_run.txt
 

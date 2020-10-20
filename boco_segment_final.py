@@ -115,7 +115,7 @@ def main(image_info,process_info,stacks,annotations,categories,annotations_folde
     if args.verbose: print("\tMeasure channel",flush=True)
     channel.measure_channels([channel])
     if args.verbose: print("\tMaking graphical segmentation",flush=True)
-    channel.make_img_with_contours(graphic_segmentation_path,auto_max = True,scale_bar = False,colorize = False,add_distance_centers = False,add_contour_numbs = False)
+    channel.make_img_with_contours(graphic_segmentation_path,auto_max = True,scale_bar = False,colorize = False,add_distance_centers = False,add_contour_numbs = True)
     if args.single_objects is not None: 
         if args.verbose: print("\tMaking single objects images")
         channel.write_single_objects(args.single_objects,merge_categories={"Junk":"None"})
