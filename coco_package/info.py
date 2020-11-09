@@ -97,7 +97,6 @@ class Session:
             if not df.loc[i,'manually_reviewed']:
                 index = df.loc[i,"image_numb"]
                 break
-
         session = Session(path,image_infos,index)
         return session
     
@@ -162,12 +161,11 @@ class Session:
         Returns
         at_end : bool : return True if further incrementing will get you past the end
         '''
-        
-        if self.index > self.n_images-1:
-            return False
+        if self.index > (self.n_images-1):
+            return True
         else: 
             self.index = self.index + 1
-            return True
+            return False
     
     def get_n_reviewed(self):
         #Return the number of images that have been manually reviewed

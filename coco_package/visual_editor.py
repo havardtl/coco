@@ -222,11 +222,11 @@ class Current_Img():
         now = datetime.datetime.now()
         self.today = now.strftime("%Y-%m-%d-%H:%M")
         
-        self.annot_path = None
-        self.img_path,self.annot_path = self.session.get_img_and_annot_paths()
+        self.img_path,self.annot_path,self.annot_mod_path = self.session.get_img_and_annot_paths()
+        
         self.load_annotation()
         self.zoomed_img = Zoomed_Img(self.img_path,self.window_height,self.zoom_level)
-        print(self.session.get_counter()+"\t"+self.annot_path + "\t is displayed",flush=True)
+        print(self.session.get_counter()+"\t"+self.annot_mod_path + "\t is displayed",flush=True)
     
     def update(self,change):
         '''
@@ -239,7 +239,7 @@ class Current_Img():
         changed_index = self.session.update(change)
         
         if changed_index: 
-            self.img_path,self.annot_path = self.session.get_img_and_annot_paths()
+            self.img_path,self.annot_path,self.annot_mod_path = self.session.get_img_and_annot_paths()
             if not os.path.exists(self.img_path): 
                 raise ValueError("Image path does not exist: "+self.img_path)
             if not os.path.exists(self.annot_path): 
@@ -312,15 +312,19 @@ class Current_Img():
 
     def save_annotation(self):
         #Save annotation file
-        info.Annotation.write_annotation_file(self.annot_path,self.reviewed_by_human,self.changelog,self.annotation,self.next_object_id)
-        print("\tSaved annotation to "+self.annot_path,flush=True)
+        info.Annotation.write_annotation_file(self.annot_mod_path,self.reviewed_by_human,self.changelog,self.annotation,self.next_object_id)
+        print("\tSaved annotation to "+self.annot_mod_path,flush=True)
         
     def load_annotation(self):
         #Load annotation file 
-        self.reviewed_by_human,self.changelog,self.annotation,self.next_object_id = info.Annotation.read_annotation_file(self.annot_path)
+        if not os.path.exists(self.annot_mod_path):
+            annot_path = self.annot_path
+        else: 
+            annot_path = self.annot_mod_path
+        self.reviewed_by_human,self.changelog,self.annotation,self.next_object_id = info.Annotation.read_annotation_file(annot_path)
         self.reviewed_by_human = True
         self.changelog = self.changelog + self.today + " manually_reviewed\n"
-        self.id = os.path.split(self.annot_path)[1]
+        self.id = os.path.split(annot_path)[1]
         self.id = os.path.splitext(self.id)[0]
         
     def euc_dist(self,x1,y1,x2,y2):
@@ -339,7 +343,7 @@ class Current_Img():
         show_size        : int  : multiplier for epsilon to determine editing area
         erase_multiplier : int  : Factor to multiply with if in erase mode 
         '''
-        epsilon = self.epsilon * self.zoom_level * show_size
+        epsilon = self.epsilon * self.zoom_level * show_size *0.5
         if erase:
             epsilon = epsilon * erase_multiplier 
         distant = []
@@ -411,11 +415,21 @@ class Session():
         Returns 
         img_path   : str : Path to current image
         annot_path : str : Path to current annotation
+        annot_mod_path : str : Path for saving modified annotation
         '''
         img_path = os.path.join(self.main_folder,self.df.loc[self.index,"root_image"],self.df.loc[self.index,"file_image"])
+        
         annot_path = annot_path = os.path.join(self.main_folder,self.df.loc[self.index,"root_annotation"],self.df.loc[self.index,"file_annotation"])
         
-        return img_path,annot_path
+        annot_mod_folder = self.df.loc[self.index,"root_annotation"]
+        annot_mod_folder = annot_mod_folder.replace("/","_")
+        annot_mod_folder = annot_mod_folder + "_corrected"
+        annot_mod_folder = os.path.join(self.main_folder,annot_mod_folder)     
+        os.makedirs(annot_mod_folder,exist_ok=True)
+        
+        annot_mod_path = os.path.join(annot_mod_folder,self.df.loc[self.index,"file_annotation"])
+        
+        return img_path,annot_path,annot_mod_path
     
     def save_session_file(self,verbose=False):
         #Save session file to session file path

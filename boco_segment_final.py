@@ -13,7 +13,7 @@ parser.add_argument('--categories',type=str,help='File to load category informat
 parser.add_argument('--single_objects',type = str, default = None,help='Create single object images in this folder for training AI, default is to not make single object images.')
 parser.add_argument('--debug',action='store_true',default=False,help='debug mode, no parallel processing and verbose')
 parser.add_argument('--verbose',action='store_true',default=False,help="Print statements about program state as it runs")
-parser.add_argument('--cores',type=int,help='Number of cores to use. Default is number of cores in machine minus 1.')
+parser.add_argument('--cores',type=int,default=1,help='Number of cores to use.')
 parser.add_argument('--n_process',type=int,help='Process the n first alphabetically sorted wells')
 args = parser.parse_args()
 
@@ -131,6 +131,7 @@ session.reset_index()
 if cores==1: 
     while True:
         main(session.get_img_info(),session.get_process_info(),stacks,annotations,categories,annotations_folder)
+        print(session.index)
         if session.next_index():
             break
         

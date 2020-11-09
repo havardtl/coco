@@ -37,7 +37,12 @@ if(dir.exists(annotation_corrected_path)){
 meta_data_present <- file.exists(meta_data_file)
 
 if(meta_data_present){
-  meta_data <- read.xlsx(meta_data_file)  
+  temp <- read.xlsx(meta_data_file)  
+  if (!is.null(temp)){
+    metadata <- temp 
+  }else{
+    meta_data_present <- FALSE
+  }
 }
 
 ###############################
@@ -140,7 +145,11 @@ if(plot_images){
   temp <- colsplit(projections$id,"_d",c("well_id","day"))
   projections <- cbind(projections,temp)
   
-  projections <- left_join(projections,meta_data,by="well_id")
+  if(meta_data_present){
+    projections <- left_join(projections,meta_data,by="well_id")
+  }else{
+    projections$treatment <- "" 
+  }
   
   projections$treatment <- factor(projections$treatment)
   
@@ -152,20 +161,22 @@ if(plot_images){
     
     out_width = length(unique(projections$day)) *1.5+0.64
     out_height = length(unique(projections$well_id))*1.5+1
-    ggsave(file.path(facets_dir,paste0("all_wells.pdf")),width=out_width,height=out_height,units="in",dpi=600,limitsize = F)
+    ggsave(file.path(projections_pdf,paste0("all_wells.pdf")),width=out_width,height=out_height,units="in",dpi=600,limitsize = F)
   }
   
   one_per_treatment <- projections[order(projections$treatment,projections$id),]
   one_per_treatment <- projections[!duplicated(paste(projections$treatment,projections$day)),]
   
-  for( i in 1){
-    p <- ggplot(one_per_treatment,aes(NA,NA)) +facet_grid(paste("day",day)~treatment+well_id) + geom_image(aes(image=file_path),size=1) + 
-      theme(plot.margin=unit(c(30,5.5,5.5,5.5),"points"),axis.title = element_blank(),axis.text = element_blank(),axis.ticks = element_blank()) 
-    p
-    
-    out_height = length(unique(one_per_treatment$day)) *1.5+0.64+0.3
-    out_width = length(unique(one_per_treatment$well_id))*1.5+1
-    ggsave(file.path(facets_dir,paste0("one_per_treatment.pdf")),width=out_width,height=out_height,units="in",dpi=600,limitsize=F)
+  if(meta_data_present){
+    for( i in 1){
+      p <- ggplot(one_per_treatment,aes(NA,NA)) +facet_grid(paste("day",day)~treatment+well_id) + geom_image(aes(image=file_path),size=1) + 
+        theme(plot.margin=unit(c(30,5.5,5.5,5.5),"points"),axis.title = element_blank(),axis.text = element_blank(),axis.ticks = element_blank()) 
+      p
+      
+      out_height = length(unique(one_per_treatment$day)) *1.5+0.64+0.3
+      out_width = length(unique(one_per_treatment$well_id))*1.5+1
+      ggsave(file.path(projections_pdf,paste0("one_per_treatment.pdf")),width=out_width,height=out_height,units="in",dpi=600,limitsize=F)
+    }
   }
   
 }
