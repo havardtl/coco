@@ -738,7 +738,7 @@ class Zstack:
                 x = 1
                 data["type"] = "w_contours"
                 data["auto_max"] = True
-                j.make_img_with_contours(self.img_w_contour_folder,scale_bar = True,auto_max = True,colorize=True,add_contour_numbs=True)
+                j.make_img_with_contours(self.img_w_contour_folder,scale_bar = True,auto_max = True,colorize=True,add_annotation_numbs=True,add_contour_numbs=False)
                 pdf_imgs[j.channel_index+1].append(make_pdf.Image_in_pdf(x,y,j.img_w_contour_path,data.copy(),x_vars,y_vars,image_vars,processed_folder,self.img_dim))
                 
                 pdf_imgs_channel[j.channel_index+1] = j.id_channel
@@ -1237,7 +1237,7 @@ class Channel:
         
         return img
    
-    def make_img_with_contours(self,img_w_contour_folder,scale_bar=False,auto_max=True,colorize=False,add_distance_centers=False,add_contour_numbs=False,scale = None):
+    def make_img_with_contours(self,img_w_contour_folder,scale_bar=False,auto_max=True,colorize=False,add_distance_centers=False,add_annotation_numbs=False,add_contour_numbs=False,scale = None):
         '''
         Make a version of the image with contours and the contour id 
 
@@ -1246,7 +1246,8 @@ class Channel:
         scale_bar            : bool  : add scale bar to image
         auto_max             : bool  : auto_max image
         colorize             : bool  : Convert from grayscale to channel specific color
-        add_annotation       : bool  : Add annotational information
+        add_distance_centers : bool  : Add point indicating location of distance center
+        add_annotation_numbs : bool  : Add numbers for annotational structures
         add_contour_numbs    : bool  : Add id_contour 
         scale                : float : Scale size of image with this amount
         '''
@@ -1287,6 +1288,11 @@ class Channel:
                     cv2.circle(img,center,2,color=color_center,thickness=-1)
 
             if add_contour_numbs:
+                id_contour = str(c.id_contour)
+                xy = (int(c.data["center_x"]*scale),int(c.data["center_y"]*scale))
+                cv2.putText(img,id_contour,xy,cv2.FONT_HERSHEY_SIMPLEX,0.5,(255,255,255),1,cv2.LINE_AA)
+
+            if add_annotation_numbs:
                 all_ids = ",".join(c.annotation_this_channel_id)
                 xy = (int(c.data["center_x"]*scale),int(c.data["center_y"]*scale))
                 cv2.putText(img,all_ids,xy,cv2.FONT_HERSHEY_SIMPLEX,0.5,color,1,cv2.LINE_AA)

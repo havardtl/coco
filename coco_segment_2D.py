@@ -145,8 +145,7 @@ def main(image_info,segment_settings,annotations,masks,info,categories):
         z_stacks[i].add_annotations(annotations)
         z_stacks[i].split_on_annotations()
         z_stacks[i].group_contours()
-        if not use_filter_masks: 
-            z_stacks[i].is_inside_combined()
+        z_stacks[i].is_inside_combined()
         z_stacks[i].check_annotations()
         z_stacks[i].update_contour_stats()
         z_stacks[i].measure_channels()
@@ -156,7 +155,7 @@ def main(image_info,segment_settings,annotations,masks,info,categories):
     
     return None
 
-if args.cores is -1:
+if args.cores == -1:
     args.cores = mp.cpu_count()-1
 
 tot_images = len(raw_imgs)

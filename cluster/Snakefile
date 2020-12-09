@@ -26,17 +26,32 @@ onerror:
 rule all: 
     #Tell snakemake which files it shall create
     input:
-        expand("stats/rois_stats/{sample}.csv",sample = wildcards.sample)
-    
+        "graphical/projections_pdf",
+        expand("stats/2D_contours_stats/{sample}.csv",sample = wildcards.sample)
+
+rule plot_imgs: 
+    input: 
+        expand("raw/rawdata/{sample}.czi",sample = wildcards.sample)
+    output: 
+        directory("graphical/projections_pdf")
+    params: 
+        mem = "100G",
+        runtime = "3:0:0"
+    threads: 1
+    log: 
+        "logs/coco_plot_images.txt"    
+    shell: 
+        "coco_plot_images.py --debug --cores {threads} &> {log}"
+
 rule coco_segment: 
     input: 
         "raw/rawdata/{sample}.czi"
     output: 
-        "stats/rois_stats/{sample}.csv"
+        "stats/2D_contours_stats/{sample}.csv"
     params: 
         mem = "15G",
         runtime = "1:0:0"
     log: 
         {"logs/coco_segment/{sample}.txt"}
     shell: 
-        "coco_segment.py --debug --raw_file {input} &> {log}"
+        "coco_segment_2D.py --debug --raw_file \"{input}\" &> {log}"

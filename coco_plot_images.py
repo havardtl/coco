@@ -5,7 +5,7 @@
 #######################
 import argparse
 parser = argparse.ArgumentParser(description = 'Extract channels from confocal images, make them into projections and plot in pdf.')
-parser.add_argument('--raw_data',default="raw/rawdata",type=str,help='Path to raw image. Can use all formats accepted by your installed version of bftools. ')
+parser.add_argument('--raw_data',default="raw/rawdata",type=str,help='Path to raw image.')
 parser.add_argument('--extracted_images_folder',type=str,default='raw/extracted_raw',help="Folder with extracted images.")
 parser.add_argument('--annotation_file',type=str,default='annotation1.xlsx',help="Excel file with annotation data for files. Make it with coco_make_annotation_file.py.")
 parser.add_argument('--projections_pdf_folder',type=str,default = 'graphical/projections_pdf', help='Output folder for pdfs with maximal projections')
@@ -48,7 +48,7 @@ if not os.path.exists(args.annotation_file):
     cmd = "coco_make_annotation_file.py"
     exit_code = os.system(cmd)
     if exit_code != 0: 
-        raise RunTimeError("Command did not finish properly. cmd: "+cmd)
+        raise RuntimeError("Command did not finish properly. cmd: "+cmd)
 
 if args.overwrite: 
     for folder in [args.temp_folder,args.projections_raw_folder,args.projections_pdf_folder]:
