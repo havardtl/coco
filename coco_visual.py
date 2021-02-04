@@ -71,7 +71,17 @@ if not os.path.exists(args.session_file):
             with open(annot_path,"w") as f: 
                 f.write("reviewed_by_human = False\nnext_org_id = 0\n--changelog--\n--organoids--\nid,X,Y,type,source,org_id,area,centroid_x,centroid_y,perimeter,hull_tot_area,hull_defect_area,solidity,radius_enclosing_circle,equivalent_diameter,circularity,mean_grey,integrated_density\n")
     
-    df.sort_values(by='id', key=lambda x: x[-2:])
+    df = df.sample(frac=1)
+
+    #Sort dataframe by channel
+    channels = df['id'].str.rsplit("_",1,expand=True).loc[:,1]
+    channels = sorted(list(set(channels)))
+    new_df = []
+    for c in channels:
+        this_c = df.loc[df["id"].str.contains(c),]
+        new_df.append(this_c)
+    df = pd.concat(new_df)
+
     df.to_csv(args.session_file,index=False)
 
 cmd = "boco_visual.py --session_file {s_f} --height {h} --zoom {z} --epsilon {e} --categories '{c}'{f_f}".format(s_f=args.session_file,h=args.height,z=args.zoom,e=args.epsilon,f_f=from_first,c=args.categories)
