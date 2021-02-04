@@ -580,7 +580,7 @@ class Zstack:
         if VERBOSE: print("Wrote contours info to "+contours_stats_path)
         df.to_csv(contours_stats_path,sep=";",index=False)
     
-    def make_projections(self,max_projection = True,auto_max=True,colorize = True,add_scale_bar = True,save_folder = None,grayscale = False):
+    def make_projections(self,max_projection = True,auto_max=False,colorize = True,add_scale_bar = True,save_folder = None,grayscale = False):
         '''
         Make projections from z_planes by finding the minimal or maximal value in the z-axis
         
