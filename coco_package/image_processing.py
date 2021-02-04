@@ -1223,7 +1223,17 @@ class Channel:
         if auto_max:
             max_pixel = np.max(np.amax(img,axis=0))+1
             img = (img/(max_pixel/255)).astype('uint8')
-        
+        else: 
+            # convert to 8 bit if any other type
+            if img.dtype == "uint16":
+                max_pixel = np.max(np.amax(img,axis=0))+1
+                if max_pixel <= 4096: 
+                    # Assuming 12 bit instead of 16 bit
+                    max_pixel = 4096
+                else: 
+                    max_pixel = 65535
+                img = (img/(max_pixel/255)).astype('uint8')
+
         if colorize:
             img = self.gray_to_color(img,self.color)
         else: 
