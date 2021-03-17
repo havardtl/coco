@@ -2240,7 +2240,7 @@ class Contour:
         else: 
             out_str = "" 
             for c in contour_list: 
-                if out_str is "": 
+                if out_str == "": 
                     out_str = str(c.id_contour) 
                 else: 
                     out_str = out_str + "," + str(c.id_contour)

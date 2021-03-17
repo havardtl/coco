@@ -15,7 +15,9 @@ It is recommended to install dependencies with conda. I had success with python 
 
 `conda config --add channels conda-forge`
 
-`conda install opencv pandas openpyxl xlrd reportlab matplotlib`
+`conda install opencv pandas openpyxl xlrd reportlab matplotlib tensorflow tk pillow`
+
+`conda install keras`
 
 I used .czi files from ZEISS for confocal image analysis. These where imported using the aicspylibczi library which can be installed with:
 
