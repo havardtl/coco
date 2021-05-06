@@ -3,7 +3,6 @@ eval "$(command conda 'shell.bash' 'hook' 2> /dev/null)"
 
 mkdir -p logs/slurm_logs
 
-module load Java
-conda activate coco2
+conda activate coco
 
 snakemake -j 200 --rerun-incomplete --max-jobs-per-second 1 --max-status-checks-per-second 1 --cluster "sbatch --output logs/slurm_logs/{rule}_%j.out -A share-mh-ikom --partition=CPUQ --mem={params.mem} -t {params.runtime} -c {threads}" &>> logs/last_run.txt
