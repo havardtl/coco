@@ -72,19 +72,22 @@ if not os.path.exists(args.session_file):
                 f.write("reviewed_by_human = False\nnext_org_id = 0\n--changelog--\n--organoids--\nid,X,Y,type,source,org_id,area,centroid_x,centroid_y,perimeter,hull_tot_area,hull_defect_area,solidity,radius_enclosing_circle,equivalent_diameter,circularity,mean_grey,integrated_density\n")
     
     df = df.sample(frac=1)
-
+    print(df)
+    
     #Sort dataframe by channel
-    channels = df['id'].str.rsplit("_",1,expand=True).loc[:,1]
-    channels = sorted(list(set(channels)))
+    df["channel_id"] = df['id'].str.rsplit("_",1,expand=True).loc[:,1]
+    channels = sorted(list(set(df["channel_id"])))
+    print(channels)
     new_df = []
     for c in channels:
-        this_c = df.loc[df["id"].str.contains(c),]
+        this_c = df.loc[df["channel_id"] == c,]
         new_df.append(this_c)
     df = pd.concat(new_df)
-
+    df.drop(columns=['channel_id'], inplace=True)
+    print(df)
     df.to_csv(args.session_file,index=False)
 
 cmd = "boco_visual.py --session_file {s_f} --height {h} --zoom {z} --epsilon {e} --categories '{c}'{f_f}".format(s_f=args.session_file,h=args.height,z=args.zoom,e=args.epsilon,f_f=from_first,c=args.categories)
 print(cmd,flush=True)
-os.system(cmd)
+#os.system(cmd)
 
