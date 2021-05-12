@@ -325,7 +325,7 @@ class Image_czi:
         '''
         def line_to_value(line): 
             tag,value = line.split("\t")
-            value = float(value.strip())
+            value = value.strip()
             return value
             
         metadata_path = os.path.join(self.extracted_folder,"meta_data.txt")
@@ -336,34 +336,46 @@ class Image_czi:
 
         for l in lines: 
             if "ScalingX" in l: 
-                physical_size['x'] = line_to_value(l)
+                physical_size['x'] = float(line_to_value(l))
             if "ScalingY" in l:     
-                physical_size['y'] = line_to_value(l)
+                physical_size['y'] = float(line_to_value(l))
             if "ScalingZ" in l: 
-                physical_size['z'] = line_to_value(l)
-                
-        #Value is in meters, so changing to micrometers
-        for k in physical_size.keys(): 
-            physical_size[k] = physical_size[k] * 10**6
-        physical_size["unit"] = "um"
+                physical_size['z'] = float(line_to_value(l))
+            if "guessed_unit" in l: 
+                physical_size["unit"] = line_to_value(l)
+        
+        if physical_size["unit"] == "m":
+            for k in physical_size.keys(): 
+                physical_size[k] = physical_size[k] * 10**6
+            physical_size["unit"] = "um"
         
         if VERBOSE: print("Read physical size from:"+metadata_path+"\n\t"+str(physical_size))
         
         return physical_size
     
-    def recursive_xml_find(self,root,tag): 
+    def recursive_xml_find(self,root,tag,new_tag_key=None): 
         '''
         Return first element in xml tree that have tag. Recursive.
 
-        root : lxml.etree : xml tree
-        tag  : str        : tag of element to find
+        root        : lxml.etree : xml tree
+        tag         : str        : tag of element to find
+        new_tag_key : str        : 
         
         Returns
-        result : list of Element : List of elemnents. result[i].tag = key, result[i].text = value
+        result : list of str : List of elemnents in the form f"{tag}\t{value}"
         '''
-        return (list(root.iter(tag)))
+        data = (list(root.iter(tag)))
+        
+        if new_tag_key is not None: 
+            tag = new_tag_key
+        
+        result = []
+        for d in data: 
+            result.append(str(tag)+"\t"+str(d.text))
+        
+        return result
 
-    def meta_xml_to_file(self,czi,out_path): 
+    def meta_xml_to_file(self,czi,meta_data_important_path,meta_data_all_path=None): 
         '''
         Extract some useful metadata from czi image object and write it to a file
         '''
@@ -372,13 +384,31 @@ class Image_czi:
         data = data + self.recursive_xml_find(meta_data,"ScalingX")
         data = data + self.recursive_xml_find(meta_data,"ScalingY")
         data = data + self.recursive_xml_find(meta_data,"ScalingZ")
-        data = data + self.recursive_xml_find(meta_data,"Dye")
-        data = data + self.recursive_xml_find(meta_data,"ImageChannelName")
         
-        with open(out_path,'w') as f: 
+        if len(data)==3:
+            data = data + ["guessed_unit\tm"]
+        else: 
+            data = ["ScalingX\t1.0","ScalingY\t1.0","ScalingZ\t1.0","guessed_unit\tpx"]
+            
+            if VERBOSE: print("Warning! Did not find scaling of images. Setting to 1 px.")
+        
+        with open(meta_data_important_path,'w') as f: 
             for d in data: 
-                f.write(str(d.tag)+"\t"+str(d.text)+"\n")
-    
+                f.write(d+"\n")
+        
+        if meta_data_all_path is not None: 
+            other_data = []
+            for elem in meta_data.iter():
+                if elem.text is not None:
+                    elem_text = str(elem.text)
+                    if len(elem_text)>0:
+                        other_data.append(str(elem.tag)+"\t"+elem_text)
+            other_data = list(set(other_data))
+            
+            with open(meta_data_all_path,'w') as f: 
+                for d in other_data: 
+                    f.write(d+"\n")
+            
     def extract_aicspylibczi(self,max_projection=True): 
         '''
         Use aicspylibczi to extract images from czi file. Assumes time and series dimensions = 1. 
@@ -415,7 +445,7 @@ class Image_czi:
                 if not cv2.imwrite(out_path,img_projection):
                     raise ValueError("Could not save image to: "+out_path)
                 
-        self.meta_xml_to_file(czi,os.path.join(self.extracted_folder,"meta_data.txt"))
+        self.meta_xml_to_file(czi,os.path.join(self.extracted_folder,"meta_data.txt"),os.path.join(self.extracted_folder,"meta_data_all.txt"))
         
         img_paths = []
         for path in os.listdir(self.extracted_folder):
