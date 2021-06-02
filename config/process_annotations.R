@@ -39,7 +39,7 @@ meta_data_present <- file.exists(meta_data_file)
 if(meta_data_present){
   temp <- read.xlsx(meta_data_file)  
   if (!is.null(temp)){
-    metadata <- temp 
+    meta_data <- temp 
   }else{
     meta_data_present <- FALSE
   }
