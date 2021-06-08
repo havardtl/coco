@@ -7,7 +7,7 @@ import argparse
 parser = argparse.ArgumentParser(description = 'Resegment organoids after manual change of annotaiton to update organoid stats')
 parser.add_argument('--z_planes',default = 'rawdata',type=str,help='Folder with all z planes, recursive. Taken with EVOS 2x objective and following naming scheme: {exp}_{plate}_{day}*_0_{well}f00d4.TIF')
 parser.add_argument('--session_file',type=str,default='ORGAI_session_file.txt',help='Session file made with ORGAI_init.py that contains paths to all annotation files')
-parser.add_argument('--annotations',type=str,default='annotations',help="Folder with annotation of channel images. NB! Annotations not manually reviewed are not added.")
+parser.add_argument('--annotations',type=str,default='annotations_corrected',help="Folder with annotation of channel images. NB! Annotations not manually reviewed are not added.")
 parser.add_argument('--out_folder',type=str,default = 'segmented_post_manual', help='Out put folder for single organoid images and info file')
 parser.add_argument('--categories',type=str,help='File to load category information from. Default is to load it from default file in config/boco_categories.csv')
 parser.add_argument('--single_objects',type = str, default = None,help='Create single object images in this folder for training AI, default is to not make single object images.')
