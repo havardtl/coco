@@ -537,14 +537,22 @@ class Zstack:
         if VERBOSE: print("Measuring contour intensity for all channels in "+str(self))
         for i in self.images:
             if VERBOSE: print(i.z_index,end="  ",flush=True)
-            all_channels = i.channels
+            
+            for j in i.channels:
+                threshold = None
+                for s in i.segment_settings: 
+                    if s.channel_index == i.channel_index: 
+                        threshold = s.thresh_lower
+                        break
+                if VERBOSE: print(f"t={threshold}",end=" ",flush=True)
+                for k in j.contours:
+                    k.measure_channel(i.channels,threshold)
             
             if self.made_combined_masks: 
-                all_channels = i.channels + [i.combined_mask]
-            
-            for j in all_channels: 
-                for k in j.contours:
-                    k.measure_channel(i.channels)
+                for j in [i.combined_mask]: 
+                    for k in j.contours:
+                        k.measure_channel(i.channels)
+
         if VERBOSE: print("")
 
     def write_contour_info(self):
@@ -2019,22 +2027,28 @@ class Contour:
         '''
         return self.img_box.at_edge(self.contour_box,edge_size = 1) 
     
-    def measure_channel(self,channels):
+    def measure_channel(self,channels,threshold=None):
         '''
         Measure this contours sum grey and sum positive pixels for all channels
 
         Params
-        channels : list of Channel : channels to measure
+        channels  : list of Channel : channels to measure
+        threshold : int             : Define positive pixels on higher than this threshold. If None: measure on mask positive pixels
         '''
+        
         only_contour = self.get_contour_mask()
         for channel in channels:
             part_of_img = channel.get_part_of_image(self.contour_box)
-            mean_grey = cv2.bitwise_and(part_of_img,part_of_img,mask=only_contour)
-            mean_grey = np.sum(mean_grey)
+            mean_grey_img = cv2.bitwise_and(part_of_img,part_of_img,mask=only_contour)
+            mean_grey = np.sum(mean_grey_img)
             
-            part_of_mask = channel.get_part_of_mask(self.contour_box)
-            sum_pos_pixels = cv2.bitwise_and(part_of_mask,part_of_mask,mask=only_contour)
-            sum_pos_pixels = np.sum(sum_pos_pixels)/255
+            if threshold is None: 
+                part_of_mask = channel.get_part_of_mask(self.contour_box)
+                sum_pos_pixels = cv2.bitwise_and(part_of_mask,part_of_mask,mask=only_contour)
+                sum_pos_pixels = np.sum(sum_pos_pixels)/255
+            else: 
+                sum_pos_pixels = np.asarray(mean_grey_img)
+                sum_pos_pixels = (sum_pos_pixels < threshold).sum()
 
             data = {
                 "sum_grey_"+str(channel.id_channel):mean_grey,
