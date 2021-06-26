@@ -538,20 +538,22 @@ class Zstack:
         for i in self.images:
             if VERBOSE: print(i.z_index,end="  ",flush=True)
             
-            for j in i.channels:
-                threshold = None
-                for s in i.segment_settings: 
-                    if s.channel_index == i.channel_index: 
-                        threshold = s.thresh_lower
-                        break
-                if VERBOSE: print(f"t={threshold}",end=" ",flush=True)
-                for k in j.contours:
-                    k.measure_channel(i.channels,threshold)
-            
             if self.made_combined_masks: 
-                for j in [i.combined_mask]: 
-                    for k in j.contours:
-                        k.measure_channel(i.channels)
+                all_channels = i.channels + [i.combined_mask]
+            else: 
+                all_channels = i.channels
+            
+            thresholds = []
+            for j in all_channels:
+                for s in i.segment_settings: 
+                    if s.channel_index == j.channel_index: 
+                        thresholds.append(s.thresh_lower)
+                        break
+            if VERBOSE: print(f"t={thresholds}",end=" ",flush=True)
+            
+            for j in all_channels: 
+                for k in j.contours:
+                    k.measure_channel(i.channels,thresholds)
 
         if VERBOSE: print("")
 
@@ -1539,18 +1541,7 @@ class Channel:
         '''
         for i in self.contours: 
             i.find_z_overlapping(next_z)
-            
-    def measure_channels(self,channels): 
-        '''
-        Measure intensity of supplied channels in all contours in this channel
-        
-        Params
-        channel : list of Channel : Channels to measure intensities in 
-        '''
-        
-        for i in self.contours: 
-            i.measure_channel(channels)
-    
+   
     def write_single_objects(self,single_objects_folder,box_size = 120,merge_categories=None,keep_ambigous=False,dry_run = False):
         '''
         Write images of only objects on a white background with a folder for each category
@@ -2027,17 +2018,17 @@ class Contour:
         '''
         return self.img_box.at_edge(self.contour_box,edge_size = 1) 
     
-    def measure_channel(self,channels,threshold=None):
+    def measure_channel(self,channels,thresholds=None):
         '''
         Measure this contours sum grey and sum positive pixels for all channels
 
         Params
-        channels  : list of Channel : channels to measure
-        threshold : int             : Define positive pixels on higher than this threshold. If None: measure on mask positive pixels
+        channels   : list of Channel : channels to measure
+        thresholds : list of int     : Define positive pixels on higher than this threshold. If None: measure on mask positive pixels
         '''
         
         only_contour = self.get_contour_mask()
-        for channel in channels:
+        for channel,threshold in zip(channels,thresholds):
             part_of_img = channel.get_part_of_image(self.contour_box)
             mean_grey_img = cv2.bitwise_and(part_of_img,part_of_img,mask=only_contour)
             mean_grey = np.sum(mean_grey_img)
@@ -2048,7 +2039,7 @@ class Contour:
                 sum_pos_pixels = np.sum(sum_pos_pixels)/255
             else: 
                 sum_pos_pixels = np.asarray(mean_grey_img)
-                sum_pos_pixels = (sum_pos_pixels < threshold).sum()
+                sum_pos_pixels = (sum_pos_pixels > threshold).sum()
 
             data = {
                 "sum_grey_"+str(channel.id_channel):mean_grey,
