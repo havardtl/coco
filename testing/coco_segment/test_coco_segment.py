@@ -43,6 +43,7 @@ def check_value(value_name,value,actual,checked_values,margin=0.0000001):
 # Reset folder
 ########################
 
+'''
 delete_folder("graphical")
 delete_folder("stats")
 delete_folder("raw/temp")
@@ -55,7 +56,8 @@ print("Running command: "+cmd)
 exit_val = os.system(cmd)
 if not exit_val == 0: 
     raise ValueError("command did not exit properly: "+cmd)
-    
+'''
+
 ########################
 # Evaulate results
 ########################
@@ -67,7 +69,7 @@ for s in stats_files:
     stats_file_path = os.path.join(stats_folder,s)
     print(stats_file_path)
     temp = pd.read_csv(stats_file_path,sep=";")
-    df_list.append(temp)
+    df_list.append(temp) 
 
 df = pd.concat(df_list)
 print(df)
@@ -76,7 +78,7 @@ print("\nObjects in all channels: ")
 channels = df["channel_id"].unique()
 for c in channels: 
     this_channel = df.loc[df["channel_id"]==c,]
-    this_channel = this_channel[["channel_id","area","equivalent_radius","annotation_this_channel_type","annotation_other_channel_type"]]
+    this_channel = this_channel[["channel_id","area","equivalent_radius","annotation_this_channel_type","annotation_other_channel_type","sum_grey_C0","sum_grey_C1","sum_grey_C2","sum_grey_C3","sum_positive_C0","sum_positive_C1","sum_positive_C2","sum_positive_C3"]]
     print(this_channel)
 
 checked_values = []
