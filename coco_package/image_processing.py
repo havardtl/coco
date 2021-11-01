@@ -553,7 +553,7 @@ class Zstack:
             
             for j in all_channels: 
                 for k in j.contours:
-                    k.measure_channel(i.channels,thresholds)
+                    k.measure_channel(j.id_channel,j.file_id,i.channels,thresholds)
 
         if VERBOSE: print("")
 
@@ -1000,6 +1000,32 @@ class Channel:
         
         if image is None: 
             raise RuntimeError("Could not read image: "+self.full_path)
+        
+        self.image_type = image.dtype
+        
+        if VERBOSE: print(f"image type is {self.image_type} \t file id: {self.file_id}")
+        
+        if self.image_type == "uint8":
+            self.image_type_original = "uint8"
+            
+        elif self.image_type == "uint16":
+            self.image_type_original = "uint16"
+            
+            if VERBOSE: print(f"Converting from uint16 to uint8.")
+            max_pixel = np.max(np.amax(image,axis=0))+1
+            if max_pixel <= 4096: 
+                self.image_type_original = "uint12"
+                if VERBOSE: print(f"WARNING: assuming 12 bit instead of 16 bit.")
+                # Assuming 12 bit instead of 16 bit
+                max_pixel = 4096
+            else: 
+                max_pixel = 65535
+                
+            image = (image/(max_pixel/255)).astype('uint8')
+            self.image_type = "uint8"
+            
+        else: 
+            raise ValueError(f"image type: '{self.image_type}' is not recognized.")
         
         if self.global_max is not None: 
             image = cv2.convertScaleAbs(image, alpha=(255.0/self.global_max))
@@ -1656,7 +1682,9 @@ class Channel:
             df = df.append(temp,ignore_index = True)
         
         df["z_index"] = self.z_index 
-        df["channel_id"] = self.id_channel 
+        df["channel_id"] = self.id_channel  
+        df["img_type"] = self.image_type
+        df["img_type_original"] = self.image_type_original
 
         return df 
 
@@ -2018,7 +2046,7 @@ class Contour:
         '''
         return self.img_box.at_edge(self.contour_box,edge_size = 1) 
     
-    def measure_channel(self,channels,thresholds=None):
+    def measure_channel(self,channel_id,fname,channels,thresholds=None):
         '''
         Measure this contours sum grey and sum positive pixels for all channels
 
@@ -2040,7 +2068,7 @@ class Contour:
             else: 
                 sum_pos_pixels = np.asarray(mean_grey_img)
                 sum_pos_pixels = (sum_pos_pixels > threshold).sum()
-
+            
             data = {
                 "sum_grey_"+str(channel.id_channel):mean_grey,
                 "sum_positive_"+str(channel.id_channel):sum_pos_pixels}
