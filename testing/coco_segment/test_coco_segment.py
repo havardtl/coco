@@ -43,7 +43,6 @@ def check_value(value_name,value,actual,checked_values,margin=0.0000001):
 # Reset folder
 ########################
 
-'''
 delete_folder("graphical")
 delete_folder("stats")
 delete_folder("raw/temp")
@@ -56,7 +55,6 @@ print("Running command: "+cmd)
 exit_val = os.system(cmd)
 if not exit_val == 0: 
     raise ValueError("command did not exit properly: "+cmd)
-'''
 
 ########################
 # Evaulate results
