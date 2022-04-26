@@ -33,9 +33,5 @@ Add folder with coco scripts to PATH by adding this line to your .bashrc:
 
 Open the folder with images you want to analyze in bash and type the command you want to use. 
 
-## Todo: 
-- Write jupyter notebook with example of usage. 
-- Add log file for each run so that you know settings used to segment. (git log -1 --format="%H" gives commit hash)
-
 
 
