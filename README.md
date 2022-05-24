@@ -8,7 +8,7 @@ boco utilize many of the same functions as coco, but analyzes bright field image
 All python scripts in main folder are runnable as command line programs. Run them with -h or --help option to get information on usage. 
 
 Details of implementation and example of use can be found in the following paper. Please cite if you use this program. 
-Lindholm et al. (June 2020). "Developmental pathways regulate cytokine-driven effector and feedback responses in the intestinal epithelium". bioRxiv. DOI/URL: https://doi.org/10.1101/2020.06.19.160747 
+Lindholm et al. (May 2022). "BMP signaling in the intestinal epithelium drives a critical feedback loop to restrain IL-13–driven tuft cell hyperplasia". Science Immunology. DOI/URL: https://doi.org/10.1126/sciimmunol.abl6543
 
 ## Installation
 It is recommended to install dependencies with conda. I had success with python 3.8 using the following commands: 
